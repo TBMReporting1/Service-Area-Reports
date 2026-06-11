@@ -480,6 +480,8 @@ document.getElementById('file-input').addEventListener('change', e => {
           lbl.style.display = 'none';
           document.getElementById('upload-btn').textContent = '↑ Load New File';
           renderAll();
+          // Auto-save to shared storage so all users see the new file immediately
+          saveAllShared();
         }, 300);
       } catch(err) {
         lbl.textContent = 'Error: ' + err.message;
@@ -1131,7 +1133,8 @@ function renderVariance(rows) {
            style="font-size:11px;color:var(--g600);font-style:${commentary?'normal':'italic'};
                   min-width:200px;outline:none;cursor:text;${isAG?'font-weight:600':'padding-left:30px'}"
            title="Click to add/edit commentary"
-           oninput="VAR_COMMENTARY[this.dataset.key]=this.innerText.trim()"
+           oninput="VAR_COMMENTARY[this.dataset.key]=this.innerText.trim();markDirty()"
+           onblur="VAR_COMMENTARY[this.dataset.key]=this.innerText.trim();saveAllShared()"
            >${commentary || (isAG ? `<span style='color:var(--mgreen);font-style:italic'>Click to add commentary…</span>` : '')}</td>
     </tr>`;
   };
@@ -1487,18 +1490,11 @@ function _ghCreate(description, fileName, data) {
     .then(gist => gist.id);
 }
 
-// ── Gist ID management (create on first use) ──────────────────────────
+// ── Gist ID management — always use the hardcoded shared IDs ──────────
+// IDs are baked into GH._stateId / GH._actId above; no per-user creation needed.
 function _ensureGistIds() {
-  var saved = localStorage.getItem(SK.gistIds);
-  if (saved) { try { var ids = JSON.parse(saved); GH._stateId = ids.state; GH._actId = ids.act; } catch(e){} }
-  if (GH._stateId && GH._actId) return Promise.resolve();
-  // Create both gists
-  return _ghCreate('SAR Dashboard State', GH.stateFile, {})
-    .then(id => { GH._stateId = id; return _ghCreate('SAR Dashboard Activity', GH.actFile, []); })
-    .then(id => {
-      GH._actId = id;
-      localStorage.setItem(SK.gistIds, JSON.stringify({ state: GH._stateId, act: GH._actId }));
-    });
+  // Always resolve immediately — shared Gist IDs are hardcoded and permanent.
+  return Promise.resolve();
 }
 
 // ── Apply state from Gist ─────────────────────────────────────────────
@@ -1597,7 +1593,7 @@ function saveAllShared() {
 
   _ensureGistIds()
     .then(() => _ghWrite(GH._stateId, GH.stateFile, stateObj))
-    .then(() => { setSyncStatus('ok'); showToast('Saved — your team will see this on refresh', '💾'); })
+    .then(() => { _lastSavedTs = meta.ts; setSyncStatus('ok'); showToast('Saved — all users will see this on next load or refresh', '💾'); })
     .catch(err => {
       console.warn('[GH] cloud save failed:', err);
       setSyncStatus('local');
@@ -1631,7 +1627,14 @@ function _applyNewVersion() {
   var banner = document.getElementById('new-version-banner');
   if (banner) banner.remove();
   if (isDirty && !confirm('You have unsaved changes. Loading will discard them. Continue?')) return;
-  loadSharedData(() => { renderAll(); showToast('Loaded latest version'); });
+  if (_pendingState) {
+    _applyState(_pendingState);
+    _lastSavedTs = (_pendingState.meta && _pendingState.meta.ts) || _lastSavedTs;
+    _pendingState = null;
+    showToast('Loaded latest version', '✅');
+  } else {
+    loadSharedData(() => { renderAll(); showToast('Loaded latest version', '✅'); });
+  }
 }
 
 // ── Save banner helpers ───────────────────────────────────────────────
@@ -1731,6 +1734,32 @@ function showToast(msg, icon) {
 initUserIdentity();
 // Always load shared state on open — shows saved Excel data immediately without re-uploading
 loadSharedData(() => { renderAll(); });
+
+// ── Auto-poll for changes from other users (every 60 seconds) ─────────
+var _lastSavedTs = '';
+function _pollForUpdates() {
+  if (!GH._stateId) return;
+  _ghRead(GH._stateId, GH.stateFile)
+    .then(state => {
+      if (!state || !state.meta) return;
+      var ts = state.meta.ts || '';
+      if (_lastSavedTs && ts && ts !== _lastSavedTs) {
+        // A different save has occurred — show banner
+        _showNewVersionBanner(state.meta);
+        // Store the pending state so _applyNewVersion can use it
+        _pendingState = state;
+      }
+      _lastSavedTs = ts;
+    })
+    .catch(() => {}); // silently ignore poll errors
+}
+var _pendingState = null;
+// Capture current ts after initial load
+setTimeout(() => {
+  _ghRead(GH._stateId, GH.stateFile).then(s => { if (s && s.meta) _lastSavedTs = s.meta.ts || ''; }).catch(()=>{});
+}, 3000);
+// Poll every 60 seconds
+setInterval(_pollForUpdates, 60000);
 </script>
 </body>
 </html>
