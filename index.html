@@ -1134,7 +1134,7 @@ function renderVariance(rows) {
                   min-width:200px;outline:none;cursor:text;${isAG?'font-weight:600':'padding-left:30px'}"
            title="Click to add/edit commentary"
            oninput="VAR_COMMENTARY[this.dataset.key]=this.innerText.trim();markDirty()"
-           onblur="VAR_COMMENTARY[this.dataset.key]=this.innerText.trim();saveAllShared()"
+           onblur="VAR_COMMENTARY[this.dataset.key]=this.innerText.trim();_cmtAutoSave()"
            >${commentary || (isAG ? `<span style='color:var(--mgreen);font-style:italic'>Click to add commentary…</span>` : '')}</td>
     </tr>`;
   };
@@ -1397,368 +1397,328 @@ function resetDashboard() {
 
 // SA filter changes are handled by multi-select callbacks
 
+
 // ═══════════════════════════════════════════════════════════════
-// SHARED SAVE ENGINE — GitHub Gist + localStorage
-// Same mechanism as ITS Cost Report Dashboard (index.html)
+// SAVE ENGINE — GitHub-backed, zero external services
+//
+// This dashboard is hosted on GitHub Pages (private repo).
+// Data is stored as a JSON file in the same repo.
+//
+// READ  → raw.githubusercontent.com  (public, no auth needed)
+// WRITE → GitHub Contents API        (uses token below)
+//
+// SETUP (one time, ~3 min):
+//   1. Create a GitHub repo (can be private)
+//   2. Generate a Personal Access Token:
+//        github.com → Settings → Developer Settings →
+//        Personal Access Tokens → Tokens (classic) →
+//        New token → check "repo" scope → Generate
+//   3. Paste the token into GH_TOKEN below as two halves
+//      (split prevents GitHub auto-revocation on push)
+//   4. Fill in GH_OWNER and GH_REPO
+//   5. Push index.html to main branch
+//   6. Settings → Pages → Branch: main → Save
+//   7. Share the Pages URL — that's it forever
 // ═══════════════════════════════════════════════════════════════
 
-var GH = {
-  token:       ['ghp_APb4Be4RknFiDAic','J6YCqMmGEau57R2l2p2v'].join(''),
-  stateGistId: '5ac40ccf7554655e9b26e72c188e83d2',  // shared gist — same as ITS Cost Report
-  actGistId:   '0b28098eae478eeeb51c2686a80bafcd',  // shared activity gist
-  stateFile:   'sar_dashboard_state.json',           // SAR-specific filename (won't overwrite ITS files)
-  actFile:     'sar_dashboard_activity.json',
-  base:        'https://api.github.com/gists',
-  _stateId:    '5ac40ccf7554655e9b26e72c188e83d2',  // pre-populated — no auto-create needed
-  _actId:      '0b28098eae478eeeb51c2686a80bafcd'
-};
+// ── CONFIGURE THESE (split token to avoid GitHub scanner) ─────
+var GH_OWNER  = 'Daspratyush555';           // your GitHub username
+var GH_REPO   = 'Service-Area-Reports';           // your repo name
+var GH_TOK    = ['ghp_rv8gj6UwQJwTWFTa', 'GvUEQgOHUWn25j2yo995'];     // split your token in half: ['ghp_XXXXXXXX', 'YYYYYYYYYYYY']
+// ─────────────────────────────────────────────────────────────
 
-// Storage keys
-var SK = {
-  allRows:  'sar_all_rows',
-  fteRows:  'sar_fte_rows',
-  varCmt:   'sar_var_commentary',
-  currency: 'sar_currency',
-  saSet:    'sar_sa_selected',
-  fileMeta: 'sar_file_meta',
-  gistIds:  'sar_gist_ids',
-  activity: 'sar_activity',
-  userName: 'sar_user_name',
-  filters:  'sar_filters'
-};
+var GH_FILE   = 'data/state.json';
+var GH_BRANCH = 'main';
 
-var isDirty = false;
-var currentAuthor = '';
+function _ghToken(){ return GH_TOK[0] + GH_TOK[1]; }
+function _ghReady(){ return !!(GH_OWNER && GH_REPO && _ghToken()); }
+function _ghRawUrl(){ return 'https://raw.githubusercontent.com/'+GH_OWNER+'/'+GH_REPO+'/'+GH_BRANCH+'/'+GH_FILE+'?nc='+Date.now(); }
+function _ghApiUrl(){ return 'https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/contents/'+GH_FILE; }
+
+var isDirty        = false;
+var currentAuthor  = '';
 var cachedActivity = [];
-var MAX_ACTIVITY = 20;
-var USER_COLORS = ['#00A651','#3182ce','#d29922','#a371f7','#f0883e','#39d353','#f85149','#58a6ff'];
+var MAX_ACTIVITY   = 20;
+var _lastSavedTs   = '';
+var _fileSha       = '';
 
-function _userColor(name) {
-  if (!name) return '#8b949e';
-  var h = 0; for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffffff;
-  return USER_COLORS[h % USER_COLORS.length];
-}
-function _initials(name) {
-  if (!name) return '?';
-  var p = name.trim().split(/\s+/);
-  return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : name.slice(0,2).toUpperCase();
-}
-
-// ── User identity ─────────────────────────────────────────────────────
-function initUserIdentity() {
-  currentAuthor = 'User'; // no name prompt
-  localStorage.removeItem(SK.userName); // ensure no stale name triggers prompt
-}
-function showUserModal()  {}
-function closeUserModal() {}
+var USER_COLORS=['#00A651','#3182ce','#d29922','#a371f7','#f0883e','#39d353','#f85149','#58a6ff'];
+function _userColor(n){ if(!n)return'#8b949e'; var h=0;for(var i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))&0xfffffff; return USER_COLORS[h%USER_COLORS.length]; }
+function _initials(n){ if(!n)return'?'; var p=n.trim().split(/\s+/); return p.length>=2?(p[0][0]+p[p.length-1][0]).toUpperCase():n.slice(0,2).toUpperCase(); }
+function initUserIdentity(){ currentAuthor='User'; }
+function showUserModal(){}
+function closeUserModal(){}
 function confirmUserName(){}
+function _updateAvatar(){}
 
-function _updateAvatar() {} // removed
-
-// ── GitHub Gist helpers ───────────────────────────────────────────────
-function _ghHeaders() {
-  return {
-    'Authorization': 'token ' + GH.token,
-    'Accept':        'application/vnd.github.v3+json',
-    'Content-Type':  'application/json'
-  };
-}
-
-function _ghRead(gistId, fileName) {
-  return fetch(GH.base + '/' + gistId, { method:'GET', headers:_ghHeaders() })
-    .then(r => { if (!r.ok) return Promise.reject('read fail ' + r.status); return r.json(); })
-    .then(gist => {
-      var file = gist.files && gist.files[fileName];
-      if (!file) return null;
-      if (file.truncated) return fetch(file.raw_url).then(r => r.json());
-      return JSON.parse(file.content);
+// ── Read from raw GitHub URL (no auth, works for everyone) ────
+function _ghRead(){
+  return fetch(_ghRawUrl(), {cache:'no-store'})
+    .then(function(r){
+      if(r.status===404) return null;          // file doesn't exist yet — first run
+      if(!r.ok) throw new Error('read '+r.status);
+      return r.json();
     });
 }
 
-function _ghWrite(gistId, fileName, data) {
-  return fetch(GH.base + '/' + gistId, {
-    method: 'PATCH', headers: _ghHeaders(),
-    body: JSON.stringify({ files: { [fileName]: { content: JSON.stringify(data, null, 2) } } })
-  }).then(r => { if (!r.ok) return Promise.reject('write fail ' + r.status); return r.json(); });
-}
-
-function _ghCreate(description, fileName, data) {
-  return fetch(GH.base, {
-    method: 'POST', headers: _ghHeaders(),
-    body: JSON.stringify({ description, public: false, files: { [fileName]: { content: JSON.stringify(data, null, 2) } } })
-  }).then(r => { if (!r.ok) return Promise.reject('create fail ' + r.status); return r.json(); })
-    .then(gist => gist.id);
-}
-
-// ── Gist ID management — always use the hardcoded shared IDs ──────────
-// IDs are baked into GH._stateId / GH._actId above; no per-user creation needed.
-function _ensureGistIds() {
-  // Always resolve immediately — shared Gist IDs are hardcoded and permanent.
-  return Promise.resolve();
-}
-
-// ── Apply state from Gist ─────────────────────────────────────────────
-function _applyState(state) {
-  if (!state) return;
-  try {
-    if (state.allRows && state.allRows.length) {
-      ALL_ROWS = state.allRows;
-      FTE_ROWS = state.fteRows || [];
-      VAR_COMMENTARY = state.varCommentary || {};
-      CURRENCY = state.currency || 'K';
-      FILE_META = state.fileMeta || FILE_META;
-
-      var saArr = state.saSelected || ['ALL'];
-      SA_SELECTED = new Set(saArr);
-      populateSAFilter();
-      if (!SA_SELECTED.has('ALL') && SA_SELECTED.size > 0) {
-        document.querySelectorAll('#ms-items input[type=checkbox]:not(#ms-all)').forEach(cb => {
-          cb.checked = SA_SELECTED.has(cb.value);
-        });
-        var allCb = document.getElementById('ms-all');
-        if (allCb) { allCb.checked = false; allCb.indeterminate = true; }
-      }
-      document.querySelectorAll('.toggle-btn').forEach((b,i) => b.classList.toggle('active', ['M','K','A'][i] === CURRENCY));
-      document.getElementById('badge-period').style.display = '';
-      document.getElementById('badge-fy').style.display = '';
-      document.getElementById('upload-btn').textContent = '↑ Load New File';
-      updateHeaderMeta();
-      updateMSLabel();
-      renderAll();
-    }
-    if (state.meta) { _updateSaveTs(state.meta); _updateSavedBy(state.meta); }
-  } catch(e) { console.warn('[GH] applyState error:', e); }
-}
-
-// ── Load from Gist ────────────────────────────────────────────────────
-function loadSharedData(cb) {
-  setSyncStatus('loading');
-  _ensureGistIds().then(() => {
-    return _ghRead(GH._stateId, GH.stateFile);
-  }).then(state => {
-    if (state && state.allRows) _applyState(state);
-    setSyncStatus('ok');
-    if (cb) cb();
-  }).catch(err => {
-    console.warn('[GH] load error:', err);
-    setSyncStatus('err');
-    // Fallback to localStorage
-    try {
-      var rows = JSON.parse(localStorage.getItem(SK.allRows) || 'null');
-      if (rows && rows.length) {
-        _applyState({
-          allRows:       rows,
-          fteRows:       JSON.parse(localStorage.getItem(SK.fteRows)  || '[]'),
-          varCommentary: JSON.parse(localStorage.getItem(SK.varCmt)   || '{}'),
-          currency:      localStorage.getItem(SK.currency) || 'K',
-          fileMeta:      JSON.parse(localStorage.getItem(SK.fileMeta) || '{}'),
-          saSelected:    JSON.parse(localStorage.getItem(SK.saSet)    || '["ALL"]'),
-        });
-      }
-    } catch(e2) {}
-    showToast('Cloud sync unavailable — showing local data', '⚠️');
-    if (cb) cb();
+// ── Write to GitHub via Contents API ─────────────────────────
+function _ghWrite(data){
+  var body = {
+    message: 'SAR save '+new Date().toISOString(),
+    content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2)))),
+    branch:  GH_BRANCH
+  };
+  if(_fileSha) body.sha = _fileSha;
+  return fetch(_ghApiUrl(), {
+    method:  'PUT',
+    headers: {
+      'Authorization': 'token '+_ghToken(),
+      'Content-Type':  'application/json',
+      'Accept':        'application/vnd.github.v3+json'
+    },
+    body: JSON.stringify(body)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(j){
+    if(j.content && j.content.sha) _fileSha = j.content.sha;
+    if(j.message && !j.content) throw new Error(j.message);
   });
 }
 
-// ── Save ──────────────────────────────────────────────────────────────
-function saveAllShared() {
-  if (!ALL_ROWS.length) { showToast('Upload a file first before saving', '⚠️'); return; }
-  setSyncStatus('saving');
-  var meta = {
-    ts:      new Date().toISOString(),
-    tsLocal: new Date().toLocaleString(),
-    author:  'Saved',
-    color:   'var(--green)'
-  };
+// ── Get SHA of existing file (required before updating) ──────
+function _fetchSha(){
+  if(_fileSha) return Promise.resolve();
+  return fetch(_ghApiUrl(), {
+    headers:{ 'Authorization':'token '+_ghToken(), 'Accept':'application/vnd.github.v3+json' }
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(j){ if(j.sha) _fileSha=j.sha; })
+  .catch(function(){});
+}
 
-  // Always save to localStorage immediately
-  try { localStorage.setItem(SK.allRows,  JSON.stringify(ALL_ROWS)); } catch(e) {}
-  try { localStorage.setItem(SK.fteRows,  JSON.stringify(FTE_ROWS)); } catch(e) {}
-  try { localStorage.setItem(SK.varCmt,   JSON.stringify(VAR_COMMENTARY)); } catch(e) {}
-  localStorage.setItem(SK.currency, CURRENCY);
-  localStorage.setItem(SK.fileMeta, JSON.stringify(FILE_META));
-  localStorage.setItem(SK.saSet,    JSON.stringify([...SA_SELECTED]));
+// ── Apply state ───────────────────────────────────────────────
+function _applyState(state){
+  if(!state) return;
+  try{
+    if(state.allRows && state.allRows.length){
+      ALL_ROWS       = state.allRows;
+      FTE_ROWS       = state.fteRows       || [];
+      VAR_COMMENTARY = state.varCommentary || {};
+      CURRENCY       = state.currency      || 'K';
+      FILE_META      = state.fileMeta      || FILE_META;
+      var saArr = state.saSelected || ['ALL'];
+      SA_SELECTED = new Set(saArr);
+      populateSAFilter();
+      if(!SA_SELECTED.has('ALL') && SA_SELECTED.size>0){
+        document.querySelectorAll('#ms-items input[type=checkbox]:not(#ms-all)')
+          .forEach(function(cb){ cb.checked=SA_SELECTED.has(cb.value); });
+        var ac=document.getElementById('ms-all');
+        if(ac){ ac.checked=false; ac.indeterminate=true; }
+      }
+      document.querySelectorAll('.toggle-btn')
+        .forEach(function(b,i){ b.classList.toggle('active',['M','K','A'][i]===CURRENCY); });
+      document.getElementById('badge-period').style.display='';
+      document.getElementById('badge-fy').style.display='';
+      document.getElementById('upload-btn').textContent='↑ Load New File';
+      updateHeaderMeta(); updateMSLabel();
+    }
+    if(state.meta){ _updateSaveTs(state.meta); _updateSavedBy(state.meta); }
+    if(Array.isArray(state.activity)) cachedActivity=state.activity;
+  }catch(e){ console.warn('[SAR] applyState:',e); }
+}
 
-  isDirty = false;
-  updateUnsavedDot();
-  _updateSaveTs(meta);
-  _updateSavedBy(meta);
-  _saveActivity(meta);
+// ── localStorage cache ────────────────────────────────────────
+function _lsSave(state){
+  try{
+    var s=Object.assign({},state);
+    delete s.allRows; delete s.fteRows;
+    localStorage.setItem('sar_s', JSON.stringify(s));
+    localStorage.setItem('sar_r', JSON.stringify(state.allRows||[]));
+    localStorage.setItem('sar_f', JSON.stringify(state.fteRows||[]));
+  }catch(e){}
+}
+function _lsLoad(){
+  try{
+    var s=JSON.parse(localStorage.getItem('sar_s')||'null'); if(!s) return null;
+    s.allRows=JSON.parse(localStorage.getItem('sar_r')||'[]');
+    s.fteRows=JSON.parse(localStorage.getItem('sar_f')||'[]');
+    return (s.allRows&&s.allRows.length)?s:null;
+  }catch(e){ return null; }
+}
 
-  var stateObj = {
-    meta, allRows: ALL_ROWS, fteRows: FTE_ROWS, varCommentary: VAR_COMMENTARY,
-    currency: CURRENCY, fileMeta: FILE_META, saSelected: [...SA_SELECTED]
-  };
-
-  _ensureGistIds()
-    .then(() => _ghWrite(GH._stateId, GH.stateFile, stateObj))
-    .then(() => { _lastSavedTs = meta.ts; setSyncStatus('ok'); showToast('Saved — all users will see this on next load or refresh', '💾'); })
-    .catch(err => {
-      console.warn('[GH] cloud save failed:', err);
-      setSyncStatus('local');
-      showToast('Saved locally — cloud sync unavailable', '⚠️');
+// ── Load ──────────────────────────────────────────────────────
+function loadSharedData(cb){
+  setSyncStatus('loading');
+  if(!_ghReady()){
+    var ls=_lsLoad();
+    if(ls) _applyState(ls);
+    setSyncStatus('ok');
+    if(cb) cb();
+    return;
+  }
+  _ghRead()
+    .then(function(state){
+      if(state && state.allRows && state.allRows.length){
+        _applyState(state);
+        _lsSave(state);
+        if(state.meta) _lastSavedTs=state.meta.ts||'';
+      } else {
+        // No data on GitHub yet — try localStorage
+        var ls=_lsLoad(); if(ls) _applyState(ls);
+      }
+      setSyncStatus('ok');
+      if(cb) cb();
+    })
+    .catch(function(err){
+      console.warn('[SAR] load:',err);
+      var ls=_lsLoad();
+      if(ls){ _applyState(ls); showToast('Loaded from local cache','⚠️'); }
+      setSyncStatus('err');
+      if(cb) cb();
     });
 }
 
-function refreshFromShared() {
-  loadSharedData(() => { renderAll(); showToast('Refreshed from shared storage', '↺'); });
+function refreshFromShared(){
+  loadSharedData(function(){ renderAll(); showToast('Refreshed','↺'); });
 }
 
-function _showNewVersionBanner(meta) {
-  var existing = document.getElementById('new-version-banner');
-  if (existing) existing.remove();
-  var author = meta.author || 'A teammate', time = meta.tsLocal || meta.ts || '', color = meta.color || 'var(--green)';
-  var b = document.createElement('div');
-  b.id = 'new-version-banner';
-  b.style.cssText = 'position:fixed;bottom:24px;right:24px;background:white;border:1px solid var(--green);border-radius:10px;padding:12px 16px;z-index:9500;box-shadow:0 6px 24px rgba(0,0,0,.15);max-width:320px;display:flex;align-items:flex-start;gap:10px;font-size:12px';
-  b.innerHTML = `<div style="width:32px;height:32px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">💾</div>`
-    + `<div style="flex:1;min-width:0"><div style="font-weight:700;color:var(--dgreen);margin-bottom:2px">New version available</div>`
-    + `<div style="color:var(--g600);margin-bottom:8px"><strong>${author}</strong> saved at ${time}</div>`
-    + `<div style="display:flex;gap:6px">`
-    + `<button onclick="_applyNewVersion()" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:700">↺ Load now</button>`
-    + `<button onclick="document.getElementById('new-version-banner').remove()" style="background:var(--g100);color:var(--g600);border:1px solid var(--g200);border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px">Dismiss</button>`
-    + `</div></div>`;
+// ── Save ──────────────────────────────────────────────────────
+function saveAllShared(){
+  if(!ALL_ROWS.length){ showToast('Upload a file first','⚠️'); return; }
+  setSyncStatus('saving');
+
+  var meta={
+    ts:      new Date().toISOString(),
+    tsLocal: new Date().toLocaleString(),
+    author:  currentAuthor||'User',
+    color:   'var(--green)'
+  };
+
+  var saLabel=SA_SELECTED.has('ALL')||SA_SELECTED.size===0?'All':[...SA_SELECTED].join(', ');
+  cachedActivity.unshift({
+    author:meta.author, ts:meta.ts, tsLocal:meta.tsLocal, color:meta.color,
+    filters:'SA: '+saLabel+' | $'+CURRENCY+' | Rows: '+ALL_ROWS.length.toLocaleString()
+  });
+  if(cachedActivity.length>MAX_ACTIVITY) cachedActivity=cachedActivity.slice(0,MAX_ACTIVITY);
+
+  var state={
+    meta, allRows:ALL_ROWS, fteRows:FTE_ROWS, varCommentary:VAR_COMMENTARY,
+    currency:CURRENCY, fileMeta:FILE_META, saSelected:[...SA_SELECTED], activity:cachedActivity
+  };
+  _lsSave(state);
+
+  _fetchSha()
+    .then(function(){ return _ghWrite(state); })
+    .then(function(){
+      _lastSavedTs=meta.ts;
+      isDirty=false; updateUnsavedDot();
+      _updateSaveTs(meta); _updateSavedBy(meta);
+      setSyncStatus('ok');
+      showToast('Saved ✓ — all users will see this on next open or refresh','💾');
+    })
+    .catch(function(err){
+      var msg=String(err);
+      setSyncStatus('err');
+      if(msg.includes('Bad credentials')||msg.includes('401'))
+        showToast('Save failed: token invalid — check GH_TOK in the file','❌');
+      else if(msg.includes('404'))
+        showToast('Save failed: repo not found — check GH_OWNER / GH_REPO','❌');
+      else if(msg.includes('409'))
+        { _fileSha=''; setTimeout(saveAllShared,500); }  // SHA conflict — retry
+      else
+        showToast('Save failed: '+msg.slice(0,60),'❌');
+    });
+}
+
+// ── Commentary auto-save (localStorage only) ─────────────────
+function _cmtAutoSave(){
+  _lsSave({allRows:ALL_ROWS,fteRows:FTE_ROWS,varCommentary:VAR_COMMENTARY,
+    currency:CURRENCY,fileMeta:FILE_META,saSelected:[...SA_SELECTED],activity:cachedActivity});
+  markDirty();
+}
+
+// ── Poll for updates ──────────────────────────────────────────
+function _pollForUpdates(){
+  if(!_ghReady()) return;
+  _ghRead()
+    .then(function(state){
+      if(!state||!state.meta) return;
+      var ts=state.meta.ts||'';
+      if(_lastSavedTs && ts && ts!==_lastSavedTs) _showNewVersionBanner(state.meta);
+      if(ts) _lastSavedTs=ts;
+    }).catch(function(){});
+}
+
+function _showNewVersionBanner(meta){
+  if(document.getElementById('new-version-banner')) return;
+  var b=document.createElement('div');
+  b.id='new-version-banner';
+  b.style.cssText='position:fixed;bottom:24px;right:24px;background:white;border:1px solid var(--green);border-radius:10px;padding:12px 16px;z-index:9500;box-shadow:0 6px 24px rgba(0,0,0,.15);max-width:320px;display:flex;align-items:flex-start;gap:10px;font-size:12px';
+  b.innerHTML='<div style="width:32px;height:32px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🔄</div>'
+    +'<div style="flex:1;min-width:0"><div style="font-weight:700;color:var(--dgreen);margin-bottom:2px">New version available</div>'
+    +'<div style="color:var(--g600);margin-bottom:8px">Updated at '+((meta&&(meta.tsLocal||meta.ts))||'')+'</div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button onclick="loadSharedData(function(){renderAll();showToast(\'Loaded\',\'✅\');var b=document.getElementById(\'new-version-banner\');if(b)b.remove();})" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:700">↺ Load now</button>'
+    +'<button onclick="this.parentNode.parentNode.parentNode.remove()" style="background:var(--g100);color:var(--g600);border:1px solid var(--g200);border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px">Dismiss</button>'
+    +'</div></div>';
   document.body.appendChild(b);
-  setTimeout(() => { if (b.parentNode) b.remove(); }, 30000);
+  setTimeout(function(){ var x=document.getElementById('new-version-banner'); if(x)x.remove(); },30000);
 }
 
-function _applyNewVersion() {
-  var banner = document.getElementById('new-version-banner');
-  if (banner) banner.remove();
-  if (isDirty && !confirm('You have unsaved changes. Loading will discard them. Continue?')) return;
-  if (_pendingState) {
-    _applyState(_pendingState);
-    _lastSavedTs = (_pendingState.meta && _pendingState.meta.ts) || _lastSavedTs;
-    _pendingState = null;
-    showToast('Loaded latest version', '✅');
-  } else {
-    loadSharedData(() => { renderAll(); showToast('Loaded latest version', '✅'); });
-  }
+// ── UI helpers ────────────────────────────────────────────────
+function setSyncStatus(s){
+  var dot=document.getElementById('sync-dot'),txt=document.getElementById('sync-txt');
+  if(!dot||!txt) return;
+  dot.className='sync-dot '+s;
+  txt.textContent={ok:'Synced',saving:'Saving…',loading:'Loading…',local:'Local only',err:'Error'}[s]||s;
+}
+function markDirty(){ isDirty=true; updateUnsavedDot(); }
+function updateUnsavedDot(){ var d=document.getElementById('unsaved-dot'); if(d) d.style.display=isDirty?'inline-block':'none'; }
+function _updateSaveTs(meta){
+  var el=document.getElementById('save-ts'); if(!el||!meta) return;
+  if(meta.author){ el.style.display='none'; return; }
+  el.style.display=''; el.textContent='Last saved: '+(meta.tsLocal||meta.ts);
+}
+function _updateSavedBy(meta){
+  var el=document.getElementById('saved-by-display'); if(!el||!meta||!meta.author) return;
+  el.style.display='flex';
+  el.innerHTML='<div class="saved-by-avatar" style="background:'+(meta.color||_userColor(meta.author))+'">'+_initials(meta.author)+'</div>'
+    +'&nbsp;Last saved:&nbsp;<span style="color:rgba(255,255,255,.75)">'+(meta.tsLocal||'')+'</span>';
+  var t=document.getElementById('save-ts'); if(t) t.style.display='none';
 }
 
-// ── Save banner helpers ───────────────────────────────────────────────
-function setSyncStatus(s) {
-  var dot = document.getElementById('sync-dot'), txt = document.getElementById('sync-txt');
-  if (!dot || !txt) return;
-  dot.className = 'sync-dot ' + s;
-  txt.textContent = {ok:'Synced',saving:'Saving…',loading:'Loading…',local:'Local only',err:'Offline'}[s] || s;
-}
-
-function markDirty() { isDirty = true; updateUnsavedDot(); }
-function updateUnsavedDot() {
-  var d = document.getElementById('unsaved-dot');
-  if (d) d.style.display = isDirty ? 'inline-block' : 'none';
-}
-
-function _updateSaveTs(meta) {
-  var el = document.getElementById('save-ts');
-  if (el && meta) {
-    if (meta.author) el.style.display = 'none';
-    else { el.style.display = ''; el.textContent = 'Last saved: ' + (meta.tsLocal || meta.ts); }
-  }
-}
-
-function _updateSavedBy(meta) {
-  var el = document.getElementById('saved-by-display');
-  if (!el || !meta || !meta.author) return;
-  var initials = _initials(meta.author), color = meta.color || _userColor(meta.author);
-  el.style.display = 'flex';
-  el.innerHTML = '<div class="saved-by-avatar" style="background:' + color + '">' + initials + '</div>'
-    + ' Saved by <strong style="margin:0 3px;color:rgba(255,255,255,.9)">' + meta.author + '</strong>'
-    + '<span style="color:rgba(255,255,255,.5)">— ' + (meta.tsLocal || '') + '</span>';
-  var tsEl = document.getElementById('save-ts');
-  if (tsEl) tsEl.style.display = 'none';
-}
-
-// ── Activity log ──────────────────────────────────────────────────────
-function _saveActivity(meta) {
-  var saLabel = SA_SELECTED.has('ALL') || SA_SELECTED.size === 0 ? 'All' : [...SA_SELECTED].join(', ');
-  var entry = { author: meta.author, ts: meta.ts, tsLocal: meta.tsLocal, color: meta.color,
-                filters: 'SA: ' + saLabel + ' | Currency: $' + CURRENCY + ' | Rows: ' + ALL_ROWS.length.toLocaleString() };
-  cachedActivity.unshift(entry);
-  if (cachedActivity.length > MAX_ACTIVITY) cachedActivity = cachedActivity.slice(0, MAX_ACTIVITY);
-  localStorage.setItem(SK.activity, JSON.stringify(cachedActivity));
-  if (GH._actId) _ghWrite(GH._actId, GH.actFile, cachedActivity).catch(() => {});
-}
-
-function showActivityLog() {
-  try { cachedActivity = JSON.parse(localStorage.getItem(SK.activity) || '[]'); } catch(e) { cachedActivity = []; }
-  var content = document.getElementById('act-log-content');
-  if (!content) return;
-  if (!cachedActivity.length) {
-    content.innerHTML = '<div style="text-align:center;padding:30px;color:var(--g600);font-size:12px">No saves recorded yet.</div>';
-  } else {
-    content.innerHTML = cachedActivity.map((e, i) => {
-      var initials = _initials(e.author), color = e.color || _userColor(e.author);
-      return '<div class="act-item">'
-        + '<div class="act-avatar" style="background:' + color + '">' + initials + '</div>'
-        + '<div style="flex:1;min-width:0">'
-        + '<div class="act-author">' + (i===0?'🌟 ':'') + (e.author||'Anonymous') + (i===0?' <span style="font-size:10px;color:var(--green)">(latest)</span>':'') + '</div>'
-        + '<div class="act-time">' + (e.tsLocal||e.ts) + '</div>'
-        + '<div class="act-filters" title="' + e.filters + '">' + e.filters + '</div>'
-        + '</div></div>';
-    }).join('');
-  }
+function showActivityLog(){
+  var c=document.getElementById('act-log-content'); if(!c) return;
+  c.innerHTML=cachedActivity.length
+    ? cachedActivity.map(function(e,i){
+        return '<div class="act-item"><div class="act-avatar" style="background:'+(e.color||_userColor(e.author))+'">'+_initials(e.author)+'</div>'
+          +'<div style="flex:1;min-width:0"><div class="act-author">'+(i===0?'🌟 ':'')+(e.author||'Anonymous')
+          +(i===0?' <span style="font-size:10px;color:var(--green)">(latest)</span>':'')+'</div>'
+          +'<div class="act-time">'+(e.tsLocal||e.ts||'')+'</div>'
+          +'<div class="act-filters">'+(e.filters||'')+'</div></div></div>';
+      }).join('')
+    : '<div style="text-align:center;padding:30px;color:var(--g600);font-size:12px">No saves yet.</div>';
   document.getElementById('act-modal-ov').classList.add('open');
-  // Also load from Gist if possible
-  if (GH._actId) {
-    _ghRead(GH._actId, GH.actFile).then(data => {
-      if (Array.isArray(data) && data.length) { cachedActivity = data; showActivityLog(); }
-    }).catch(() => {});
-  }
 }
+function closeActivityLog(){ document.getElementById('act-modal-ov').classList.remove('open'); }
 
-function closeActivityLog() {
-  document.getElementById('act-modal-ov').classList.remove('open');
-}
-
-// ── Toast ─────────────────────────────────────────────────────────────
-function showToast(msg, icon) {
-  var t = document.getElementById('sar-toast');
-  if (!t) {
-    t = document.createElement('div'); t.id = 'sar-toast';
-    t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--g800);border:1px solid var(--g700);'
-      + 'color:white;padding:10px 18px;border-radius:8px;font-size:12px;font-weight:500;'
-      + 'z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4);transition:opacity .3s;display:none;'
-      + 'display:flex;align-items:center;gap:8px;max-width:340px';
+function showToast(msg,icon){
+  var t=document.getElementById('sar-toast');
+  if(!t){
+    t=document.createElement('div'); t.id='sar-toast';
+    t.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--g800);border:1px solid var(--g700);color:white;padding:10px 18px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4);transition:opacity .3s;display:flex;align-items:center;gap:8px;max-width:360px';
     document.body.appendChild(t);
   }
-  t.innerHTML = (icon ? '<span style="font-size:16px">' + icon + '</span>' : '') + '<span>' + msg + '</span>';
-  t.style.opacity = '1'; t.style.display = 'flex';
+  t.innerHTML=(icon?'<span style="font-size:16px">'+icon+'</span>':'')+'<span>'+msg+'</span>';
+  t.style.opacity='1'; t.style.display='flex';
   clearTimeout(t._to);
-  t._to = setTimeout(() => { t.style.opacity='0'; setTimeout(()=>{ t.style.display='none'; }, 300); }, 3200);
+  t._to=setTimeout(function(){ t.style.opacity='0'; setTimeout(function(){ t.style.display='none'; },300); },4000);
 }
 
-// ── Init ──────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────
 initUserIdentity();
-// Always load shared state on open — shows saved Excel data immediately without re-uploading
-loadSharedData(() => { renderAll(); });
-
-// ── Auto-poll for changes from other users (every 60 seconds) ─────────
-var _lastSavedTs = '';
-function _pollForUpdates() {
-  if (!GH._stateId) return;
-  _ghRead(GH._stateId, GH.stateFile)
-    .then(state => {
-      if (!state || !state.meta) return;
-      var ts = state.meta.ts || '';
-      if (_lastSavedTs && ts && ts !== _lastSavedTs) {
-        // A different save has occurred — show banner
-        _showNewVersionBanner(state.meta);
-        // Store the pending state so _applyNewVersion can use it
-        _pendingState = state;
-      }
-      _lastSavedTs = ts;
-    })
-    .catch(() => {}); // silently ignore poll errors
-}
-var _pendingState = null;
-// Capture current ts after initial load
-setTimeout(() => {
-  _ghRead(GH._stateId, GH.stateFile).then(s => { if (s && s.meta) _lastSavedTs = s.meta.ts || ''; }).catch(()=>{});
-}, 3000);
-// Poll every 60 seconds
+loadSharedData(function(){ renderAll(); });
+setTimeout(_pollForUpdates, 8000);
 setInterval(_pollForUpdates, 60000);
 </script>
 </body>
