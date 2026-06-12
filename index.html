@@ -1426,20 +1426,28 @@ var GH_REPO   = 'Service-Area-Reports';       // your repo name
 var GH_TOK    = ['ghp_S4k7dk8TbmKzVxui', 'EBAAZfoLjZDuKV4BEd6q']; // ['ghp_FIRST_HALF', 'SECOND_HALF']
 // ─────────────────────────────────────────────────────────────
 
-var GH_FILE   = 'data/sar_state.json';
-var GH_BRANCH = 'main';
+// Two separate files — rows file can be large, state file stays tiny
+var GH_BRANCH    = 'main';
+var GH_FILE_ROWS = 'data/sar_rows.json';   // compressed row data
+var GH_FILE_META = 'data/sar_meta.json';   // state: filters, comments, activity, meta
 
 function _ghToken(){ return GH_TOK[0] + GH_TOK[1]; }
 function _ghReady(){ return !!(GH_OWNER && GH_REPO && _ghToken()); }
-function _ghRawUrl(){ return 'https://raw.githubusercontent.com/'+GH_OWNER+'/'+GH_REPO+'/'+GH_BRANCH+'/'+GH_FILE+'?nc='+Date.now(); }
-function _ghApiUrl(){ return 'https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/contents/'+GH_FILE; }
+
+function _ghRawUrl(file){
+  return 'https://raw.githubusercontent.com/'+GH_OWNER+'/'+GH_REPO+'/'+GH_BRANCH+'/'+file+'?nc='+Date.now();
+}
+function _ghApiUrl(file){
+  return 'https://api.github.com/repos/'+GH_OWNER+'/'+GH_REPO+'/contents/'+file;
+}
 
 var isDirty        = false;
 var currentAuthor  = '';
 var cachedActivity = [];
 var MAX_ACTIVITY   = 20;
 var _lastSavedTs   = '';
-var _fileSha       = '';
+var _shaRows       = '';   // GitHub SHA for rows file
+var _shaMeta       = '';   // GitHub SHA for meta file
 
 var USER_COLORS=['#00A651','#3182ce','#d29922','#a371f7','#f0883e','#39d353','#f85149','#58a6ff'];
 function _userColor(n){ if(!n)return'#8b949e'; var h=0;for(var i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))&0xfffffff; return USER_COLORS[h%USER_COLORS.length]; }
@@ -1450,78 +1458,53 @@ function closeUserModal(){}
 function confirmUserName(){}
 function _updateAvatar(){}
 
-// ── Row compression (mirrors ITS Report pattern) ──────────────
-// String fields are indexed into lookup arrays to shrink payload.
+// ── Row compression ────────────────────────────────────────────
 var _FIELDS = ['Division','WBSType','Account','AcctGroup','AcctSubgroup',
                'CostCenter','ServiceLine','Region','ServiceArea','Portfolio',
                'GrossRecov','DTMF'];
 
 function _packRows(rows){
   if(!rows||!rows.length) return null;
-  // Build index maps for each string field
-  var maps = {};
-  _FIELDS.forEach(function(f){ maps[f]={}; });
-  var lists = {};
-  _FIELDS.forEach(function(f){ lists[f]=[]; });
-
+  var maps={}, lists={};
+  _FIELDS.forEach(function(f){ maps[f]={}; lists[f]=[]; });
   var compact = rows.map(function(r){
-    var arr = [];
+    var arr=[];
     _FIELDS.forEach(function(f){
-      var v = r[f]||'';
+      var v=r[f]||'';
       if(maps[f][v]===undefined){ maps[f][v]=lists[f].length; lists[f].push(v); }
       arr.push(maps[f][v]);
     });
-    // Append numeric fields directly
-    arr.push(r.FiscalPeriod||0);
-    arr.push(r.TotalCosts||0);
-    arr.push(r.AnnualFcst||0);
-    arr.push(r.PlanCosts||0);
-    arr.push(r.AnnualPlan||0);
-    arr.push(r.YTDFcst||0);
-    arr.push(r.VarPlan||0);
-    arr.push(r.VarFcst||0);
+    arr.push(r.FiscalPeriod||0, r.TotalCosts||0, r.AnnualFcst||0,
+             r.PlanCosts||0, r.AnnualPlan||0, r.YTDFcst||0,
+             r.VarPlan||0, r.VarFcst||0);
     return arr;
   });
-  return { P: compact, L: lists };
+  return { P:compact, L:lists };
 }
 
 function _unpackRows(packed){
   if(!packed||!packed.P) return [];
-  var lists = packed.L;
+  var lists=packed.L;
   return packed.P.map(function(arr){
-    var r = {};
+    var r={};
     _FIELDS.forEach(function(f,i){ r[f]=lists[f][arr[i]]||''; });
-    r.FiscalPeriod = arr[12];
-    r.TotalCosts   = arr[13];
-    r.AnnualFcst   = arr[14];
-    r.PlanCosts    = arr[15];
-    r.AnnualPlan   = arr[16];
-    r.YTDFcst      = arr[17];
-    r.VarPlan      = arr[18];
-    r.VarFcst      = arr[19];
+    r.FiscalPeriod=arr[12]; r.TotalCosts=arr[13]; r.AnnualFcst=arr[14];
+    r.PlanCosts=arr[15];    r.AnnualPlan=arr[16]; r.YTDFcst=arr[17];
+    r.VarPlan=arr[18];      r.VarFcst=arr[19];
     return r;
   });
 }
 
-// ── FTE row compression ────────────────────────────────────────
-function _packFte(rows){ return rows && rows.length ? JSON.stringify(rows) : null; }
-function _unpackFte(s){ try{ return s ? JSON.parse(s) : []; }catch(e){ return []; } }
-
 // ── localStorage — instant restore on every open ───────────────
 var LS = {
-  meta:     'sar_meta',
-  rowPack:  'sar_rows_packed',
-  ftePack:  'sar_fte_packed',
-  varCmt:   'sar_var_cmt',
-  currency: 'sar_currency',
-  fileMeta: 'sar_file_meta',
-  saSet:    'sar_sa_set',
-  activity: 'sar_activity'
+  meta:'sar_meta', rowPack:'sar_rows_packed', ftePack:'sar_fte_packed',
+  varCmt:'sar_var_cmt', currency:'sar_currency', fileMeta:'sar_file_meta',
+  saSet:'sar_sa_set', activity:'sar_activity'
 };
 
 function _lsSave(){
   try{
-    localStorage.setItem(LS.meta,     JSON.stringify({ ts: new Date().toISOString(), tsLocal: new Date().toLocaleString() }));
+    localStorage.setItem(LS.meta,     JSON.stringify({ts:new Date().toISOString(),tsLocal:new Date().toLocaleString()}));
     localStorage.setItem(LS.rowPack,  JSON.stringify(_packRows(ALL_ROWS)));
     localStorage.setItem(LS.ftePack,  JSON.stringify(FTE_ROWS));
     localStorage.setItem(LS.varCmt,   JSON.stringify(VAR_COMMENTARY));
@@ -1532,20 +1515,20 @@ function _lsSave(){
   }catch(e){ console.warn('[SAR] localStorage save error:',e); }
 }
 
-// restoreUploadedData — called at startup, loads data from localStorage instantly
+// restoreUploadedData — called at startup, loads from localStorage instantly
 function restoreUploadedData(){
   try{
-    var rowPack = JSON.parse(localStorage.getItem(LS.rowPack)||'null');
+    var rowPack=JSON.parse(localStorage.getItem(LS.rowPack)||'null');
     if(!rowPack) return false;
-    ALL_ROWS = _unpackRows(rowPack);
+    ALL_ROWS=_unpackRows(rowPack);
     if(!ALL_ROWS.length) return false;
 
-    FTE_ROWS       = JSON.parse(localStorage.getItem(LS.ftePack)  ||'[]') || [];
-    VAR_COMMENTARY = JSON.parse(localStorage.getItem(LS.varCmt)   ||'{}') || {};
-    CURRENCY       = localStorage.getItem(LS.currency) || 'K';
-    FILE_META      = JSON.parse(localStorage.getItem(LS.fileMeta) ||'{}') || FILE_META;
-    var saArr      = JSON.parse(localStorage.getItem(LS.saSet)    ||'["ALL"]');
-    cachedActivity = JSON.parse(localStorage.getItem(LS.activity) ||'[]') || [];
+    FTE_ROWS       = JSON.parse(localStorage.getItem(LS.ftePack)||'[]')||[];
+    VAR_COMMENTARY = JSON.parse(localStorage.getItem(LS.varCmt) ||'{}')||{};
+    CURRENCY       = localStorage.getItem(LS.currency)||'K';
+    FILE_META      = JSON.parse(localStorage.getItem(LS.fileMeta)||'{}')||FILE_META;
+    cachedActivity = JSON.parse(localStorage.getItem(LS.activity)||'[]')||[];
+    var saArr      = JSON.parse(localStorage.getItem(LS.saSet)||'["ALL"]');
     SA_SELECTED = new Set(saArr);
 
     populateSAFilter();
@@ -1563,118 +1546,108 @@ function restoreUploadedData(){
     updateHeaderMeta();
     updateMSLabel();
     return true;
-  }catch(e){
-    console.warn('[SAR] restoreUploadedData error:',e);
-    return false;
-  }
+  }catch(e){ console.warn('[SAR] restoreUploadedData:',e); return false; }
 }
 
-// ── GitHub helpers ─────────────────────────────────────────────
-function _ghRead(){
-  return fetch(_ghRawUrl(), {cache:'no-store'})
-    .then(function(r){
-      if(r.status===404) return null;
-      if(!r.ok) throw new Error('read '+r.status);
-      return r.json();
-    });
+// ── GitHub read/write helpers ──────────────────────────────────
+function _ghGet(file){
+  return fetch(_ghRawUrl(file),{cache:'no-store'})
+    .then(function(r){ if(r.status===404) return null; if(!r.ok) throw new Error('read '+r.status); return r.json(); });
 }
 
-function _ghWrite(data){
-  var content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
-  var body = { message:'SAR save '+new Date().toISOString(), content:content, branch:GH_BRANCH };
-  if(_fileSha) body.sha = _fileSha;
-  return fetch(_ghApiUrl(), {
+function _ghPut(file, shaRef, data){
+  // Serialize, encode to base64 safely (handles Unicode)
+  var json    = JSON.stringify(data);
+  var encoded = btoa(unescape(encodeURIComponent(json)));
+  var body    = { message:'SAR save '+new Date().toISOString(), content:encoded, branch:GH_BRANCH };
+  if(shaRef[0]) body.sha = shaRef[0];
+  return fetch(_ghApiUrl(file),{
     method:'PUT',
     headers:{
       'Authorization':'token '+_ghToken(),
-      'Content-Type': 'application/json',
-      'Accept':       'application/vnd.github.v3+json'
+      'Content-Type':'application/json',
+      'Accept':'application/vnd.github.v3+json'
     },
-    body: JSON.stringify(body)
+    body:JSON.stringify(body)
   })
   .then(function(r){ return r.json(); })
   .then(function(j){
-    if(j.content && j.content.sha) _fileSha=j.content.sha;
     if(j.message && !j.content) throw new Error(j.message);
+    if(j.content && j.content.sha) shaRef[0]=j.content.sha;
   });
 }
 
-function _fetchSha(){
-  if(_fileSha||!_ghReady()) return Promise.resolve();
-  return fetch(_ghApiUrl(),{
+function _ghGetSha(file, shaRef){
+  if(shaRef[0]||!_ghReady()) return Promise.resolve();
+  return fetch(_ghApiUrl(file),{
     headers:{'Authorization':'token '+_ghToken(),'Accept':'application/vnd.github.v3+json'}
   }).then(function(r){ return r.json(); })
-    .then(function(j){ if(j.sha) _fileSha=j.sha; })
+    .then(function(j){ if(j.sha) shaRef[0]=j.sha; })
     .catch(function(){});
 }
 
-// ── Apply full state from GitHub ───────────────────────────────
-function _applyGHState(state){
-  if(!state||!state.rowPack) return;
+// ── Apply full state fetched from GitHub ───────────────────────
+function _applyGHState(rowData, metaData){
   try{
-    var rows = _unpackRows(state.rowPack);
+    var rows=_unpackRows(rowData);
     if(!rows||!rows.length) return;
-    ALL_ROWS       = rows;
-    FTE_ROWS       = state.fteRows       || [];
-    VAR_COMMENTARY = state.varCommentary || {};
-    CURRENCY       = state.currency      || 'K';
-    FILE_META      = state.fileMeta      || FILE_META;
-    if(Array.isArray(state.activity)) cachedActivity = state.activity;
+    ALL_ROWS=rows;
 
-    var saArr = state.saSelected || ['ALL'];
-    SA_SELECTED = new Set(saArr);
-    populateSAFilter();
-    if(!SA_SELECTED.has('ALL') && SA_SELECTED.size>0){
-      document.querySelectorAll('#ms-items input[type=checkbox]:not(#ms-all)')
-        .forEach(function(cb){ cb.checked=SA_SELECTED.has(cb.value); });
-      var ac=document.getElementById('ms-all');
-      if(ac){ ac.checked=false; ac.indeterminate=true; }
+    if(metaData){
+      FTE_ROWS       = metaData.fteRows       || [];
+      VAR_COMMENTARY = metaData.varCommentary || {};
+      CURRENCY       = metaData.currency      || 'K';
+      FILE_META      = metaData.fileMeta      || FILE_META;
+      if(Array.isArray(metaData.activity)) cachedActivity=metaData.activity;
+      var saArr=metaData.saSelected||['ALL'];
+      SA_SELECTED=new Set(saArr);
+      populateSAFilter();
+      if(!SA_SELECTED.has('ALL') && SA_SELECTED.size>0){
+        document.querySelectorAll('#ms-items input[type=checkbox]:not(#ms-all)')
+          .forEach(function(cb){ cb.checked=SA_SELECTED.has(cb.value); });
+        var ac=document.getElementById('ms-all');
+        if(ac){ ac.checked=false; ac.indeterminate=true; }
+      }
+      document.querySelectorAll('.toggle-btn')
+        .forEach(function(b,i){ b.classList.toggle('active',['M','K','A'][i]===CURRENCY); });
+      if(metaData.meta){ _updateSaveTs(metaData.meta); _updateSavedBy(metaData.meta); _lastSavedTs=metaData.meta.ts||''; }
     }
-    document.querySelectorAll('.toggle-btn')
-      .forEach(function(b,i){ b.classList.toggle('active',['M','K','A'][i]===CURRENCY); });
     document.getElementById('badge-period').style.display='';
     document.getElementById('badge-fy').style.display='';
     document.getElementById('upload-btn').textContent='↑ Load New File';
     updateHeaderMeta();
     updateMSLabel();
-
-    // Also update localStorage so next open is instant even without GitHub
-    _lsSave();
-    if(state.meta) { _updateSaveTs(state.meta); _updateSavedBy(state.meta); _lastSavedTs=state.meta.ts||''; }
+    _lsSave(); // mirror to localStorage for instant next-open
   }catch(e){ console.warn('[SAR] applyGHState:',e); }
 }
 
-// ── Load from GitHub (background, after localStorage restore) ──
+// ── Load from GitHub (background) ─────────────────────────────
 function loadSharedData(cb){
-  if(!_ghReady()){
-    setSyncStatus('ok');
-    if(cb) cb();
-    return;
-  }
+  if(!_ghReady()){ setSyncStatus('ok'); if(cb)cb(); return; }
   setSyncStatus('loading');
-  _ghRead()
-    .then(function(state){
-      if(state && state.rowPack){
-        var ts = state.meta && state.meta.ts || '';
-        // Only re-render if GitHub has newer data than what localStorage gave us
-        var lsMeta = JSON.parse(localStorage.getItem(LS.meta)||'null');
-        var lsTs   = lsMeta && lsMeta.ts || '';
-        if(!lsTs || ts > lsTs){
-          _applyGHState(state);
+  Promise.all([_ghGet(GH_FILE_ROWS), _ghGet(GH_FILE_META)])
+    .then(function(res){
+      var rowData=res[0], metaData=res[1];
+      if(rowData && rowData.P){
+        var ghTs  = metaData && metaData.meta && metaData.meta.ts || '';
+        var lsMeta= JSON.parse(localStorage.getItem(LS.meta)||'null');
+        var lsTs  = lsMeta && lsMeta.ts || '';
+        if(!lsTs || ghTs > lsTs){
+          _applyGHState(rowData, metaData);
           renderAll();
-        } else if(state.meta){
-          _updateSaveTs(state.meta);
-          _updateSavedBy(state.meta);
-          _lastSavedTs = ts;
+        } else if(metaData && metaData.meta){
+          _updateSaveTs(metaData.meta);
+          _updateSavedBy(metaData.meta);
+          _lastSavedTs=ghTs;
         }
       }
       setSyncStatus('ok');
-      if(cb) cb();
+      if(cb)cb();
     })
     .catch(function(err){
-      console.warn('[SAR] loadSharedData error:',err);
+      console.warn('[SAR] loadSharedData:',err);
       setSyncStatus(ALL_ROWS.length?'ok':'err');
-      if(cb) cb();
+      if(cb)cb();
     });
 }
 
@@ -1682,53 +1655,51 @@ function refreshFromShared(){
   loadSharedData(function(){ renderAll(); showToast('Refreshed','↺'); });
 }
 
-// ── Save ───────────────────────────────────────────────────────
+// ── Save (rows → one file, state → another) ────────────────────
 function saveAllShared(){
   if(!ALL_ROWS.length){ showToast('Upload a file first','⚠️'); return; }
   setSyncStatus('saving');
 
-  var meta={
-    ts:      new Date().toISOString(),
-    tsLocal: new Date().toLocaleString(),
-    author:  currentAuthor||'User',
-    color:   'var(--green)'
-  };
+  var meta={ts:new Date().toISOString(), tsLocal:new Date().toLocaleString(),
+            author:currentAuthor||'User', color:'var(--green)'};
 
   var saLabel=SA_SELECTED.has('ALL')||SA_SELECTED.size===0?'All':[...SA_SELECTED].join(', ');
-  cachedActivity.unshift({
-    author:meta.author, ts:meta.ts, tsLocal:meta.tsLocal, color:meta.color,
-    filters:'SA: '+saLabel+' | $'+CURRENCY+' | Rows: '+ALL_ROWS.length.toLocaleString()
-  });
+  cachedActivity.unshift({author:meta.author, ts:meta.ts, tsLocal:meta.tsLocal,
+    color:meta.color, filters:'SA: '+saLabel+' | $'+CURRENCY+' | Rows: '+ALL_ROWS.length.toLocaleString()});
   if(cachedActivity.length>MAX_ACTIVITY) cachedActivity=cachedActivity.slice(0,MAX_ACTIVITY);
 
-  // Always save to localStorage first (instant)
+  // Always persist to localStorage first
   _lsSave();
 
   if(!_ghReady()){
-    isDirty=false; updateUnsavedDot();
-    _updateSaveTs(meta); _updateSavedBy(meta);
+    isDirty=false; updateUnsavedDot(); _updateSaveTs(meta); _updateSavedBy(meta);
     setSyncStatus('ok');
     showToast('Saved locally — configure GitHub to share with team','ℹ️');
     return;
   }
 
-  var stateDoc = {
-    meta:         meta,
-    rowPack:      _packRows(ALL_ROWS),   // compressed rows
-    fteRows:      FTE_ROWS,
-    varCommentary:VAR_COMMENTARY,
-    currency:     CURRENCY,
-    fileMeta:     FILE_META,
-    saSelected:   [...SA_SELECTED],
-    activity:     cachedActivity
+  var rowsDoc = _packRows(ALL_ROWS);           // only compressed rows
+  var metaDoc = {                              // everything else (small)
+    meta:meta, fteRows:FTE_ROWS, varCommentary:VAR_COMMENTARY,
+    currency:CURRENCY, fileMeta:FILE_META,
+    saSelected:[...SA_SELECTED], activity:cachedActivity
   };
 
-  _fetchSha()
-    .then(function(){ return _ghWrite(stateDoc); })
+  // Use array wrappers so _ghPut can update the sha by reference
+  var shaRowsRef=[_shaRows], shaMetaRef=[_shaMeta];
+
+  // Fetch current SHAs if not yet known, then write both files in parallel
+  Promise.all([_ghGetSha(GH_FILE_ROWS,shaRowsRef), _ghGetSha(GH_FILE_META,shaMetaRef)])
     .then(function(){
+      return Promise.all([
+        _ghPut(GH_FILE_ROWS, shaRowsRef, rowsDoc),
+        _ghPut(GH_FILE_META, shaMetaRef, metaDoc)
+      ]);
+    })
+    .then(function(){
+      _shaRows=shaRowsRef[0]; _shaMeta=shaMetaRef[0];
       _lastSavedTs=meta.ts;
-      isDirty=false; updateUnsavedDot();
-      _updateSaveTs(meta); _updateSavedBy(meta);
+      isDirty=false; updateUnsavedDot(); _updateSaveTs(meta); _updateSavedBy(meta);
       setSyncStatus('ok');
       showToast('Saved ✓ — all users will see this on next open or refresh','💾');
     })
@@ -1740,23 +1711,23 @@ function saveAllShared(){
       else if(msg.includes('404'))
         showToast('Save failed: repo not found — check GH_OWNER / GH_REPO','❌');
       else if(msg.includes('409'))
-        { _fileSha=''; setTimeout(saveAllShared,500); }
+        { _shaRows=''; _shaMeta=''; setTimeout(saveAllShared,800); }
       else
-        showToast('Save failed: '+msg.slice(0,60),'❌');
+        showToast('Save failed: '+msg.slice(0,80),'❌');
     });
 }
 
 // ── Comment auto-save (localStorage only) ─────────────────────
 function _cmtAutoSave(){ _lsSave(); markDirty(); }
 
-// ── Poll for updates (60 s) ───────────────────────────────────
+// ── Poll for updates every 60 s ───────────────────────────────
 function _pollForUpdates(){
   if(!_ghReady()) return;
-  _ghRead()
-    .then(function(state){
-      if(!state||!state.meta) return;
-      var ts=state.meta.ts||'';
-      if(_lastSavedTs && ts && ts!==_lastSavedTs) _showNewVersionBanner(state.meta);
+  _ghGet(GH_FILE_META)
+    .then(function(meta){
+      if(!meta||!meta.meta) return;
+      var ts=meta.meta.ts||'';
+      if(_lastSavedTs && ts && ts!==_lastSavedTs) _showNewVersionBanner(meta.meta);
       if(ts) _lastSavedTs=ts;
     }).catch(function(){});
 }
@@ -1825,21 +1796,14 @@ function showToast(msg,icon){
   t.innerHTML=(icon?'<span style="font-size:16px">'+icon+'</span>':'')+'<span>'+msg+'</span>';
   t.style.opacity='1'; t.style.display='flex';
   clearTimeout(t._to);
-  t._to=setTimeout(function(){ t.style.opacity='0'; setTimeout(function(){ t.style.display='none'; },300); },4000);
+  t._to=setTimeout(function(){ t.style.opacity='0'; setTimeout(function(){ t.style.display='none'; },300); },4500);
 }
 
 // ── Init ───────────────────────────────────────────────────────
 initUserIdentity();
-
-// Step 1: Restore from localStorage immediately (instant — no network needed)
 var _hadLocalData = restoreUploadedData();
 if(_hadLocalData) renderAll();
-
-// Step 2: Fetch from GitHub in background (silently updates if newer data exists)
-loadSharedData(function(){
-  if(!_hadLocalData) renderAll(); // first load — render now
-});
-
+loadSharedData(function(){ if(!_hadLocalData) renderAll(); });
 setTimeout(_pollForUpdates, 10000);
 setInterval(_pollForUpdates, 60000);
 </script>
