@@ -1860,7 +1860,7 @@ function showToast(msg,icon){
 initUserIdentity();
 var _hadLocalData = restoreUploadedData();
 if(_hadLocalData) renderAll();
-loadSharedData(function(){ if(!_hadLocalData) renderAll(); });
+loadSharedData(function(){ renderAll(); });
 setTimeout(_pollForUpdates, 10000);
 setInterval(_pollForUpdates, 60000);
 </script>
