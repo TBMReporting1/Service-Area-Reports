@@ -220,8 +220,14 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
       <p id="header-sub">No data loaded — upload an Excel file or load a saved snapshot</p>
     </div>
     <div class="header-right">
-      <span class="badge" id="badge-period" style="display:none">P13</span>
-      <span class="badge" id="badge-fy" style="display:none">FY26</span>
+      <select id="badge-period" style="display:none;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:600;color:white;cursor:pointer;appearance:none;text-align:center" onchange="onPeriodDropdownChange(this.value)" title="YTD Period (display only — does not filter data)">
+        <option value="P1">YTD P1</option><option value="P2">YTD P2</option><option value="P3">YTD P3</option>
+        <option value="P4">YTD P4</option><option value="P5">YTD P5</option><option value="P6">YTD P6</option>
+        <option value="P7">YTD P7</option><option value="P8">YTD P8</option><option value="P9">YTD P9</option>
+        <option value="P10">YTD P10</option><option value="P11">YTD P11</option><option value="P12">YTD P12</option>
+        <option value="P13" selected>YTD P13</option>
+      </select>
+      <span class="badge" id="badge-fy" style="display:none">FY27</span>
       <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-txt">Loading…</span></div>
 
       <button class="save-btn primary" onclick="saveAllShared()" title="Save & share dashboard">💾 Save Dashboard</button>
@@ -462,7 +468,7 @@ document.getElementById('file-input').addEventListener('change', e => {
         const m = f.name.match(/FY(\d+)[_\s]?P(\d+)/i);
         FILE_META = {
           name: f.name,
-          fy: m ? 'FY' + m[1] : 'FY26',
+          fy: m ? 'FY' + m[1] : 'FY27',
           period: m ? 'P' + m[2] : 'P13'
         };
 
@@ -1420,12 +1426,26 @@ function updateHeaderMeta() {
   const saLabel = SA_SELECTED.has('ALL') || SA_SELECTED.size === 0
     ? 'All Service Areas'
     : [...SA_SELECTED].join(', ');
+  // Sync the period dropdown to FILE_META.period (display only — does not affect data)
+  const sel = document.getElementById('badge-period');
+  if (sel && FILE_META.period) {
+    const opt = [...sel.options].find(o => o.value === FILE_META.period);
+    if (opt) sel.value = FILE_META.period;
+  }
+  const displayPeriod = (sel && sel.value) || FILE_META.period || '';
   document.getElementById('header-sub').textContent =
-    (FILE_META.fy || 'Service Area Report') + (FILE_META.period ? ' · ' + FILE_META.period : '') +
+    (FILE_META.fy || 'Service Area Report') + (displayPeriod ? ' · ' + displayPeriod : '') +
     ' · ' + saLabel + (FILE_META.name ? ' · Source: ' + FILE_META.name : '');
-  document.getElementById('badge-fy').textContent     = FILE_META.fy;
-  document.getElementById('badge-period').textContent = FILE_META.period;
-  document.getElementById('footer-info').textContent  = FILE_META.fy + ' ' + FILE_META.period + ' Close · ' + FILE_META.name;
+  document.getElementById('badge-fy').textContent = FILE_META.fy;
+  document.getElementById('footer-info').textContent = FILE_META.fy + ' ' + displayPeriod + ' Close · ' + FILE_META.name;
+}
+
+// Period dropdown change — cosmetic only, updates header label & saves display preference
+function onPeriodDropdownChange(val) {
+  FILE_META.period = val;
+  updateHeaderMeta();
+  markDirty();
+  showToast('Period display updated to YTD ' + val + ' (dashboard numbers unchanged)', '📅');
 }
 
 function resetDashboard() {
