@@ -1775,7 +1775,12 @@ function saveAllShared(){
 }
 
 // ── Comment auto-save (localStorage only) ─────────────────────
-function _cmtAutoSave(){ _lsSave(); markDirty(); }
+function _cmtAutoSave(){
+    _lsSave();
+    markDirty();
+    clearTimeout(_cmtAutoSave._t);
+    _cmtAutoSave._t = setTimeout(function(){ saveAllShared(); }, 3000);
+}
 
 // ── Poll for updates every 60 s ───────────────────────────────
 function _pollForUpdates(){
