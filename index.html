@@ -1689,14 +1689,14 @@ function loadSharedData(cb){
         var ghTs  = metaData && metaData.meta && metaData.meta.ts || '';
         var lsMeta= JSON.parse(localStorage.getItem(LS.meta)||'null');
         var lsTs  = lsMeta && lsMeta.ts || '';
-        if(!lsTs || ghTs > lsTs){
-          _applyGHState(rowData, metaData);
-          renderAll();
-        } else if(metaData && metaData.meta){
-          _updateSaveTs(metaData.meta);
-          _updateSavedBy(metaData.meta);
-          _lastSavedTs=ghTs;
-        }
+        if (rowData && rowData.P) {
+    _applyGHState(rowData, metaData);
+    renderAll();
+} else if (metaData && metaData.meta) {
+    _updateSaveTs(metaData.meta);
+    _updateSavedBy(metaData.meta);
+    _lastSavedTs = ghTs;
+}
       }
       setSyncStatus('ok');
       if(cb)cb();
