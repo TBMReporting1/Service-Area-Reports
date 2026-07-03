@@ -43,10 +43,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;ba
 #dashboard{display:block}
 
 /* ── Deloitte Brand Bar ── */
-.brand-bar{background:#000;padding:8px 28px;display:flex;align-items:center;gap:10px}
-.brand-wordmark{display:flex;align-items:center;gap:0}
-.brand-wordmark span{color:white;font-size:17px;font-weight:400;letter-spacing:-.3px;font-family:"Arial",sans-serif}
-.brand-dot{width:9px;height:9px;border-radius:50%;background:var(--green);margin-left:1px;flex-shrink:0}
+.brand-bar{background:#000000;padding:10px 20px;display:flex;align-items:center;gap:10px}
+.brand-wordmark{display:flex;align-items:baseline;gap:0;font-family:Arial,Helvetica,sans-serif}
+.brand-wordmark .dlt-text{color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px}
+.brand-wordmark .dlt-dot{color:#86BC25;font-size:22px;font-weight:700;margin-left:1px}
 /* ── Header ── */
 .header{background:linear-gradient(135deg,var(--dgreen) 0%,var(--green) 100%);color:white;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,0.15);flex-wrap:wrap;gap:10px}
 .header-left h1{font-size:20px;font-weight:800;letter-spacing:-.3px}
@@ -189,6 +189,10 @@ td.pos{color:var(--dgreen);font-weight:700}
 /* ── Commentary cell ── */
 td[contenteditable="true"]:hover{background:var(--lgreen)!important}
 td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px solid var(--green)!important;box-shadow:inset 0 -2px 0 var(--green)}
+/* ── Variance SA Navigator ── */
+.var-nav-link{display:block;padding:7px 14px;font-size:12px;font-weight:600;color:var(--g700);cursor:pointer;border-left:3px solid transparent;transition:all .15s;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.var-nav-link:hover{background:var(--lgreen);color:var(--dgreen);border-left-color:var(--mgreen)}
+.var-nav-link.active{background:var(--lgreen);color:var(--dgreen);border-left-color:var(--green);font-weight:800}
 /* ── Footer ── */
 .footer{background:var(--g800);color:rgba(255,255,255,.4);text-align:center;padding:11px;font-size:11px;margin-top:30px}
 
@@ -209,7 +213,7 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
   <!-- Deloitte Brand Bar -->
   <div class="brand-bar">
     <div class="brand-wordmark">
-      <span>Deloitte</span><div class="brand-dot"></div>
+      <span class="dlt-text">Deloitte</span><span class="dlt-dot">.</span>
     </div>
   </div>
 
@@ -249,13 +253,29 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
     <button class="save-btn" onclick="refreshFromShared()" style="font-size:10px;padding:3px 9px">↺ Refresh</button>
   </div>
 
-  <!-- Control Bar: Currency Toggle + Service Area Filter -->
+  <!-- Control Bar: Currency Toggle + Fiscal Period + Service Area Filter -->
   <div class="control-bar">
     <div class="ctrl-group">
       <span class="ctrl-label">Display</span>
       <div class="toggle-group">
         <button class="toggle-btn active" onclick="setCurrency('M')">$M (Millions)</button>
         <button class="toggle-btn" onclick="setCurrency('A')">$A (Absolutes)</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="ctrl-group" id="fp-filter-group">
+      <span class="ctrl-label">YTD Period</span>
+      <div class="ms-wrap" id="fp-ms-wrap">
+        <div class="ms-trigger" id="fp-ms-trigger" onclick="toggleFPDropdown()">
+          <span id="fp-ms-label">All Periods (YTD)</span>
+        </div>
+        <div class="ms-dropdown" id="fp-ms-dropdown">
+          <div id="fp-ms-items"></div>
+          <div class="ms-actions">
+            <button class="ms-action-btn" onclick="fpSelectAll()">Select All</button>
+            <button class="ms-action-btn" onclick="fpClearAll()">Clear All</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="divider"></div>
@@ -274,6 +294,15 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
         </div>
       </div>
     </div>
+    <div class="divider"></div>
+    <div class="ctrl-group" id="gr-filter-group">
+      <span class="ctrl-label">Gross / Recovery</span>
+      <div class="toggle-group">
+        <button class="toggle-btn active" id="gr-btn-all"   onclick="setGRFilter('ALL')">All</button>
+        <button class="toggle-btn"        id="gr-btn-gross" onclick="setGRFilter('GROSS')">Gross Only</button>
+        <button class="toggle-btn"        id="gr-btn-recov" onclick="setGRFilter('RECOV')">Recoveries Only</button>
+      </div>
+    </div>
   </div>
 
   <!-- Tabs -->
@@ -288,6 +317,7 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
   <!-- PAGE: EXECUTIVE SUMMARY -->
   <div id="page-summary" class="page active">
     <div class="kpi-grid" id="kpi-grid"></div>
+    <!-- Row 1: Period Trend left half, Gross vs Recoveries right half -->
     <div class="two-col">
       <div class="card">
         <div class="card-title">Period Trend — Actual vs Plan vs Forecast (Gross)</div>
@@ -299,10 +329,19 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
         <div class="chart-wrap tall"><canvas id="trendChart"></canvas></div>
       </div>
       <div class="card">
+        <div class="card-title">Gross vs Recoveries — by Account Group</div>
+        <div class="chart-wrap tall"><canvas id="grossRecovChart"></canvas></div>
+      </div>
+    </div>
+    <!-- Row 2: WBS Type + Region donuts -->
+    <div class="two-col">
+      <div class="card">
         <div class="card-title">Actual by WBS Type</div>
-        <div class="chart-wrap"><canvas id="wbsDonut"></canvas></div>
-        <div class="card-title" style="margin-top:18px">Actual by Region</div>
-        <div class="chart-wrap short"><canvas id="regionDonut"></canvas></div>
+        <div class="chart-wrap short"><canvas id="wbsDonut"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Actual by Region</div>
+        <div class="chart-wrap tall"><canvas id="regionDonut"></canvas></div>
       </div>
     </div>
     <div class="full-col card">
@@ -326,10 +365,19 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
   <!-- PAGE: SERVICE LINES -->
   <div id="page-service-lines" class="page">
     <div class="full-col card">
-      <div class="card-title">Service Line Financial Summary — YTD</div>
-      <div class="tbl-wrap"><table><thead><tr>
-        <th style="text-align:left">Service Line</th>
-        <th>Annual Plan Costs</th><th>Annual Forecast</th><th>YTD Plan</th>
+      <div class="card-title">Service Line Hierarchy — YTD Financial Summary</div>
+      <!-- Drill-down path switcher -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--g600)">Drill-Down Path</span>
+        <div style="display:flex;border:1px solid var(--g200);border-radius:8px;overflow:hidden">
+          <button id="sl-path-btn-0" class="toggle-btn active" onclick="setSLPath(0)" style="padding:6px 16px;white-space:nowrap">Service Area → Service Line → Cost Center</button>
+          <button id="sl-path-btn-1" class="toggle-btn" onclick="setSLPath(1)" style="padding:6px 16px;white-space:nowrap">Service Line → Portfolio → Program → Product → Project</button>
+        </div>
+      </div>
+      <div id="sl-path-hint" style="font-size:11px;color:var(--g600);margin-bottom:10px">Click a row to expand: Service Area → Service Line → Cost Center</div>
+      <div class="tbl-wrap"><table id="sl-hier-table"><thead><tr>
+        <th style="text-align:left;min-width:260px">Name</th>
+        <th>Annual Plan</th><th>Annual Forecast</th><th>YTD Plan</th>
         <th>YTD Forecast</th><th>YTD Actual</th><th>Var to Plan</th><th>Var to Forecast</th>
       </tr></thead><tbody id="sl-tbody"></tbody></table></div>
     </div>
@@ -341,6 +389,15 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
 
   <!-- PAGE: ACCOUNT GROUPS -->
   <div id="page-account-groups" class="page">
+    <div class="full-col card">
+      <div class="card-title">Account Group Breakdown — Drill-Down View</div>
+      <div style="font-size:11px;color:var(--g600);margin-bottom:10px">Click a row to expand: Account Group → Account Subgroup → Account Name</div>
+      <div class="tbl-wrap"><table id="ag-drill-table"><thead><tr>
+        <th style="text-align:left;min-width:280px">Name</th>
+        <th>Annual Plan</th><th>Annual Forecast</th><th>YTD Plan</th>
+        <th>YTD Forecast</th><th>YTD Actual</th><th>Var to Plan</th><th>Var to Forecast</th>
+      </tr></thead><tbody id="ag-drill-tbody"></tbody></table></div>
+    </div>
     <div class="full-col card">
       <div class="card-title">Account Group — Actual vs Plan</div>
       <div class="chart-wrap tall"><canvas id="acctChart"></canvas></div>
@@ -383,23 +440,34 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
 
   <!-- PAGE: VARIANCE -->
   <div id="page-variance" class="page">
-    <div class="full-col card">
-      <div class="card-title">Variance Analysis — Account Group &amp; Subgroup Breakup</div>
-      <div class="tbl-wrap" style="max-height:680px;overflow-y:auto">
-        <table id="var-table">
-          <thead>
-            <tr>
-              <th style="text-align:left;min-width:220px">Account Group / Subgroup</th>
-              <th>YTD Actual</th>
-              <th>YTD Plan</th>
-              <th>Act vs Plan ($)</th>
-              <th>Act vs Plan (%)</th>
-              <th style="min-width:300px;text-align:left">Variance Commentary</th>
-            </tr>
-          </thead>
-          <tbody id="var-tbody"></tbody>
-        </table>
+    <!-- Info banner -->
+    <div style="background:#e6f4ed;border:1px solid var(--green);border-radius:8px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--dgreen)">
+      ℹ️ Variance tables are shown <strong>per Service Area</strong> and are <strong>not affected</strong> by the Service Area filter above. Comments are saved per Service Area independently.
+    </div>
+
+    <!-- Two-column layout: sticky nav left, tables right -->
+    <div style="display:flex;gap:16px;align-items:flex-start">
+
+      <!-- LEFT: SA Navigator (sticky) -->
+      <div id="var-sa-nav" style="width:210px;flex-shrink:0;position:sticky;top:12px;background:white;border-radius:10px;box-shadow:var(--shadow);padding:14px 0;z-index:10">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--g600);padding:0 14px 10px">Service Areas</div>
+        <div id="var-nav-links"></div>
       </div>
+
+      <!-- RIGHT: Tables column -->
+      <div style="flex:1;min-width:0">
+        <!-- Global expand / collapse bar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;background:white;border-radius:8px;padding:8px 14px;margin-bottom:12px;box-shadow:var(--shadow)">
+          <span style="font-size:12px;font-weight:700;color:var(--g700)">All Account Group Breakdowns</span>
+          <div style="display:flex;gap:8px">
+            <button onclick="varExpandAll()" style="background:var(--lgreen);color:var(--dgreen);border:1px solid var(--mgreen);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer">▼ Expand All</button>
+            <button onclick="varCollapseAll()" style="background:var(--g100);color:var(--g600);border:1px solid var(--g200);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer">▶ Collapse All</button>
+          </div>
+        </div>
+        <!-- Per-SA tables injected here -->
+        <div id="variance-sa-container"></div>
+      </div>
+
     </div>
   </div>
 
@@ -430,6 +498,8 @@ let CURRENCY = 'M';    // M | A
 let CHARTS = {};
 let FILE_META = { name: '', fy: '', period: '' };
 let VAR_COMMENTARY = {}; // { accountGroup: 'commentary text' } — parsed from Excel or editable
+let SL_PATH = 0;       // 0 = ServiceArea>ServiceLine>CostCenter  |  1 = Portfolio>Program>Product>Project
+let GR_FILTER = 'ALL'; // ALL | GROSS | RECOV
 
 // ═══════════════════════════════════════════════════════════════
 // FILE UPLOAD & PARSING
@@ -562,6 +632,8 @@ function parseITS(wb) {
       Region:       str(r[C.Region]),
       ServiceArea:  str(r[C.ServiceArea]),
       Portfolio:    str(r[C.Portfolio]),
+      Product:      C.Product >= 0 ? str(r[C.Product]) : '',
+      ProgramName:  C.ProgramName >= 0 ? str(r[C.ProgramName]) : '',
       GrossRecov:   str(r[C.GrossRecov]),
       DTMF:         str(r[C.DTMF]),
       TotalCosts:   num('TotalCosts'),
@@ -742,6 +814,7 @@ function SA_FILTER_STR() {
 // ═══════════════════════════════════════════════════════════════
 // ── Multi-select state ──
 let SA_SELECTED = new Set(['ALL']); // 'ALL' means all selected
+let FP_SELECTED = new Set(['ALL']); // fiscal period filter — 'ALL' = all periods
 
 function populateSAFilter() {
   const areas = [...new Set(ALL_ROWS.map(r => r.ServiceArea).filter(Boolean))].sort();
@@ -762,11 +835,92 @@ function populateSAFilter() {
   });
   SA_SELECTED = new Set(['ALL']);
   updateMSLabel();
+  populateFPFilter();
+}
+
+function populateFPFilter() {
+  // Derive available periods from data (only periods that have actual data)
+  const periods = [...new Set(ALL_ROWS.map(r => r.FiscalPeriod).filter(p => p >= 1 && p <= 13))].sort((a,b) => a-b);
+  const container = document.getElementById('fp-ms-items');
+  if (!container) return;
+  container.innerHTML = '';
+  const allItem = document.createElement('div');
+  allItem.className = 'ms-item';
+  allItem.innerHTML = `<input type="checkbox" id="fp-ms-all" checked onchange="fpToggleAll(this)"><label for="fp-ms-all"><strong>All Periods (YTD)</strong></label>`;
+  container.appendChild(allItem);
+  periods.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'ms-item';
+    div.innerHTML = `<input type="checkbox" id="fp-ms-${p}" value="${p}" checked onchange="fpToggleItem(this)"><label for="fp-ms-${p}">YTD P${p}</label>`;
+    container.appendChild(div);
+  });
+  FP_SELECTED = new Set(['ALL']);
+  updateFPLabel();
 }
 
 function toggleMSDropdown() {
   document.getElementById('ms-trigger').classList.toggle('open');
   document.getElementById('ms-dropdown').classList.toggle('open');
+}
+
+function toggleFPDropdown() {
+  document.getElementById('fp-ms-trigger').classList.toggle('open');
+  document.getElementById('fp-ms-dropdown').classList.toggle('open');
+}
+
+function fpToggleAll(cb) {
+  document.querySelectorAll('#fp-ms-items input[type=checkbox]:not(#fp-ms-all)').forEach(c => c.checked = cb.checked);
+  FP_SELECTED = cb.checked ? new Set(['ALL']) : new Set();
+  updateFPLabel();
+  renderAll();
+}
+
+function fpToggleItem(cb) {
+  const allCbs = document.querySelectorAll('#fp-ms-items input[type=checkbox]:not(#fp-ms-all)');
+  const checked = [...allCbs].filter(c => c.checked).map(c => parseInt(c.value));
+  const allCb = document.getElementById('fp-ms-all');
+  if (checked.length === allCbs.length) {
+    allCb.checked = true; allCb.indeterminate = false;
+    FP_SELECTED = new Set(['ALL']);
+  } else if (checked.length === 0) {
+    allCb.checked = false; allCb.indeterminate = false;
+    FP_SELECTED = new Set();
+  } else {
+    allCb.checked = false; allCb.indeterminate = true;
+    FP_SELECTED = new Set(checked);
+  }
+  updateFPLabel();
+  renderAll();
+}
+
+function fpSelectAll() {
+  document.querySelectorAll('#fp-ms-items input[type=checkbox]').forEach(c => c.checked = true);
+  const allCb = document.getElementById('fp-ms-all');
+  if (allCb) { allCb.checked = true; allCb.indeterminate = false; }
+  FP_SELECTED = new Set(['ALL']);
+  updateFPLabel();
+  renderAll();
+}
+
+function fpClearAll() {
+  document.querySelectorAll('#fp-ms-items input[type=checkbox]').forEach(c => c.checked = false);
+  const allCb = document.getElementById('fp-ms-all');
+  if (allCb) { allCb.checked = false; allCb.indeterminate = false; }
+  FP_SELECTED = new Set();
+  updateFPLabel();
+  renderAll();
+}
+
+function updateFPLabel() {
+  const lbl = document.getElementById('fp-ms-label');
+  if (!lbl) return;
+  if (FP_SELECTED.has('ALL') || FP_SELECTED.size === 0) {
+    lbl.textContent = FP_SELECTED.size === 0 ? 'None selected' : 'All Periods (YTD)';
+    return;
+  }
+  const arr = [...FP_SELECTED].sort((a,b)=>a-b);
+  if (arr.length === 1) { lbl.innerHTML = `<span class="ms-tag">YTD P${arr[0]}</span>`; return; }
+  lbl.innerHTML = arr.slice(0,2).map(p=>`<span class="ms-tag">YTD P${p}</span>`).join(' ') + (arr.length > 2 ? ` <span class="ms-tag">+${arr.length-2}</span>` : '');
 }
 
 function msToggleAll(cb) {
@@ -839,13 +993,40 @@ document.addEventListener('click', e => {
     document.getElementById('ms-trigger')?.classList.remove('open');
     document.getElementById('ms-dropdown')?.classList.remove('open');
   }
+  const fpWrap = document.getElementById('fp-ms-wrap');
+  if (fpWrap && !fpWrap.contains(e.target)) {
+    document.getElementById('fp-ms-trigger')?.classList.remove('open');
+    document.getElementById('fp-ms-dropdown')?.classList.remove('open');
+  }
 });
 
 function onSAChange() { renderAll(); }
 
+function setGRFilter(val) {
+  GR_FILTER = val;
+  ['ALL','GROSS','RECOV'].forEach(v => {
+    const btn = document.getElementById('gr-btn-' + v.toLowerCase());
+    if (btn) btn.classList.toggle('active', v === val);
+  });
+  renderAll();
+}
+
 function filteredRows() {
-  if (SA_SELECTED.has('ALL') || SA_SELECTED.size === 0) return ALL_ROWS;
-  return ALL_ROWS.filter(r => SA_SELECTED.has(r.ServiceArea));
+  let rows = ALL_ROWS;
+  // SA filter
+  if (!SA_SELECTED.has('ALL') && SA_SELECTED.size > 0)
+    rows = rows.filter(r => SA_SELECTED.has(r.ServiceArea));
+  // FP filter: include only rows up to and including the max selected period (YTD semantics)
+  if (!FP_SELECTED.has('ALL') && FP_SELECTED.size > 0) {
+    const maxP = Math.max(...FP_SELECTED);
+    rows = rows.filter(r => r.FiscalPeriod <= maxP);
+  }
+  // Gross/Recovery filter
+  if (GR_FILTER === 'GROSS')
+    rows = rows.filter(r => r.GrossRecov && r.GrossRecov.toLowerCase() === 'gross');
+  else if (GR_FILTER === 'RECOV')
+    rows = rows.filter(r => r.GrossRecov && r.GrossRecov.toLowerCase().includes('recov'));
+  return rows;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -887,16 +1068,41 @@ function sumBy(rows, keyFn, fields) {
 
 const FIN_FIELDS = ['TotalCosts','AnnualFcst','PlanCosts','AnnualPlan','YTDFcst','VarPlan','VarFcst'];
 
-function grossRows(rows) { return rows.filter(r => r.GrossRecov && r.GrossRecov.toLowerCase() === 'gross'); }
+function grossRows(rows) {
+  // If GR_FILTER is already applied upstream (GROSS or RECOV), rows are pre-filtered — return as-is.
+  // Only filter here when showing ALL rows (default).
+  if (GR_FILTER === 'GROSS' || GR_FILTER === 'RECOV') return rows;
+  return rows.filter(r => r.GrossRecov && r.GrossRecov.toLowerCase() === 'gross');
+}
 
 function periodTrend(rows) {
-  const gr = grossRows(rows);
+  // Plan = sum of AnnualPlan per period from ALL_ROWS (SA-filtered + GR-filtered, NOT FP-filtered)
+  // Always show all 13 periods regardless of FP filter.
+  let planRows = ALL_ROWS;
+  if (!SA_SELECTED.has('ALL') && SA_SELECTED.size > 0)
+    planRows = ALL_ROWS.filter(r => SA_SELECTED.has(r.ServiceArea));
+  // Apply GR filter to plan rows too so they match the selected view
+  if (GR_FILTER === 'GROSS')
+    planRows = planRows.filter(r => r.GrossRecov && r.GrossRecov.toLowerCase() === 'gross');
+  else if (GR_FILTER === 'RECOV')
+    planRows = planRows.filter(r => r.GrossRecov && r.GrossRecov.toLowerCase().includes('recov'));
+
   const out = {};
-  for (let p = 1; p <= 13; p++) out[p] = { act: 0, plan: 0, fcst: 0 };
-  for (const r of gr) {
-    if (out[r.FiscalPeriod]) {
+  for (let p = 1; p <= 13; p++) out[p] = { act: null, plan: 0, fcst: null };
+
+  // Sum AnnualPlan per period
+  for (const r of planRows) {
+    if (out[r.FiscalPeriod] !== undefined) {
+      out[r.FiscalPeriod].plan += r.AnnualPlan;
+    }
+  }
+
+  // Actuals and Forecast — use the already GR-filtered rows passed in
+  for (const r of rows) {
+    if (out[r.FiscalPeriod] !== undefined) {
+      if (out[r.FiscalPeriod].act === null) out[r.FiscalPeriod].act = 0;
+      if (out[r.FiscalPeriod].fcst === null) out[r.FiscalPeriod].fcst = 0;
       out[r.FiscalPeriod].act  += r.TotalCosts;
-      out[r.FiscalPeriod].plan += r.PlanCosts;
       out[r.FiscalPeriod].fcst += r.YTDFcst;
     }
   }
@@ -934,26 +1140,28 @@ function renderAll() {
   renderTrendChart(rows);
   renderWBSDonut(rows);
   renderRegionDonut(rows);
+  renderGrossRecovChart(rows);
   renderAGTable(rows);
   renderWBSTable(rows);
   renderSLTable(rows);
   renderSLBar(rows);
   renderAcctChart(rows);
   renderAcctProgress(rows);
+  renderAGDrillTable(rows);
   renderFTE();
-  renderVariance(rows);
+  renderVarianceAllSA();
 }
 
 function renderEmptyDashboard() {
   const msg = 'Upload an Excel file using the <strong>↑ Upload Excel File</strong> button in the top right.';
   document.getElementById('kpi-grid').innerHTML = emptyState(msg);
   // destroy any lingering charts
-  ['trendChart','wbsDonut','regionDonut','acctChart','slBarChart','fteTrendChart','fteSlChart'].forEach(id => {
+  ['trendChart','wbsDonut','regionDonut','grossRecovChart','acctChart','slBarChart','fteTrendChart','fteSlChart'].forEach(id => {
     if (CHARTS[id]) { CHARTS[id].destroy(); delete CHARTS[id]; }
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
-  ['ag-tbody','wbs-tbody','sl-tbody'].forEach(id => {
+  ['ag-tbody','wbs-tbody','sl-tbody','ag-drill-tbody'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--g600);font-style:italic">Upload a file to see data</td></tr>`;
   });
@@ -1009,27 +1217,85 @@ function mkChart(id, type, data, opts={}) {
 function renderTrendChart(rows) {
   const trend = periodTrend(rows);
   const labels = ['P1','P2','P3','P4','P5','P6','P7','P8','P9','P10','P11','P12','P13'];
-  const act  = Object.values(trend).map(t => t.act);
-  const plan = Object.values(trend).map(t => t.plan);
-  const fcst = Object.values(trend).map(t => t.fcst);
-  mkChart('trendChart','line',{
-    labels,
-    datasets:[
-      {label:'Actual',  data:act,  borderColor:GREEN, backgroundColor:GREEN+'22',fill:true, tension:.3,pointRadius:4,borderWidth:2.5},
-      {label:'Plan',    data:plan, borderColor:BLUE,  backgroundColor:'transparent',fill:false,tension:.3,borderDash:[5,3],pointRadius:3,borderWidth:2},
-      {label:'Forecast',data:fcst, borderColor:ORANGE,backgroundColor:'transparent',fill:false,tension:.3,borderDash:[3,2],pointRadius:3,borderWidth:2},
-    ]
-  },{
-    responsive:true,maintainAspectRatio:true,
-    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y)}}},
-    scales:{y:{ticks:{callback:v=>fmt(v)},grid:{color:'#e8e8f033'}},x:{grid:{display:false}}}
+  const act  = Object.values(trend).map(t => t.act);   // null where no data → bar gaps
+  const plan = Object.values(trend).map(t => t.plan);  // always full P1-P13 from PlanCosts
+  const fcst = Object.values(trend).map(t => t.fcst);  // null where no data
+
+  if (CHARTS['trendChart']) { CHARTS['trendChart'].destroy(); delete CHARTS['trendChart']; }
+  const el = document.getElementById('trendChart');
+  if (!el) return;
+  el.style.display = '';
+
+  CHARTS['trendChart'] = new Chart(el.getContext('2d'), {
+    data: {
+      labels,
+      datasets: [
+        // Actuals — bar
+        {
+          type: 'bar',
+          label: 'Actual',
+          data: act,
+          backgroundColor: GREEN + '99',
+          borderColor: GREEN,
+          borderWidth: 1,
+          borderRadius: 3,
+          order: 2
+        },
+        // Plan — line (always shown P1-P13)
+        {
+          type: 'line',
+          label: 'Plan',
+          data: plan,
+          borderColor: BLUE,
+          backgroundColor: 'transparent',
+          borderDash: [6, 3],
+          pointRadius: 3,
+          pointBackgroundColor: BLUE,
+          borderWidth: 2,
+          tension: 0.3,
+          spanGaps: true,
+          order: 1
+        },
+        // Forecast — line (only where data exists)
+        {
+          type: 'line',
+          label: 'Forecast',
+          data: fcst,
+          borderColor: ORANGE,
+          backgroundColor: 'transparent',
+          borderDash: [3, 2],
+          pointRadius: 3,
+          pointBackgroundColor: ORANGE,
+          borderWidth: 2,
+          tension: 0.3,
+          spanGaps: false,
+          order: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: c => c.parsed.y !== null ? ' ' + c.dataset.label + ': ' + fmt(c.parsed.y) : null
+          }
+        }
+      },
+      scales: {
+        y: { ticks: { callback: v => fmt(v) }, grid: { color: '#e8e8f033' } },
+        x: { grid: { display: false } }
+      }
+    }
   });
 }
 
 function renderWBSDonut(rows) {
-  const gr = grossRows(rows);
   const wbsMap = {};
-  for (const r of gr) {
+  for (const r of rows) {
     const k = r.WBSType || 'Other';
     wbsMap[k] = (wbsMap[k]||0) + r.TotalCosts;
   }
@@ -1045,27 +1311,41 @@ function renderWBSDonut(rows) {
 }
 
 function renderRegionDonut(rows) {
-  const gr = grossRows(rows);
   const regMap = {};
-  for (const r of gr) {
+  for (const r of rows) {
     const k = r.Region || 'Unknown';
     regMap[k] = (regMap[k]||0) + r.TotalCosts;
   }
-  const labels = Object.keys(regMap).sort((a,b)=>regMap[b]-regMap[a]);
-  const vals = labels.map(l=>regMap[l]);
-  mkChart('regionDonut','doughnut',{
+  const sorted = Object.entries(regMap).sort((a,b) => b[1]-a[1]);
+  const labels = sorted.map(([k]) => k);
+  const vals   = sorted.map(([,v]) => v);
+  const colors = [GREEN+'cc', BLUE+'cc', ORANGE+'cc', '#9b59b6cc', '#1abc9ccc'];
+  mkChart('regionDonut','bar',{
     labels,
-    datasets:[{data:vals,backgroundColor:[GREEN+'cc',BLUE+'cc',ORANGE+'cc','#9b59b6cc'],borderWidth:2,borderColor:'#fff'}]
+    datasets:[{
+      label:'YTD Actual',
+      data: vals,
+      backgroundColor: labels.map((_,i) => colors[i % colors.length]),
+      borderRadius: 5,
+      borderSkipped: false,
+    }]
   },{
-    responsive:true,maintainAspectRatio:true,cutout:'55%',
-    plugins:{legend:{position:'right',labels:{boxWidth:10,padding:10}},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmt(c.parsed)}}}
+    indexAxis:'y',
+    responsive:true, maintainAspectRatio:true,
+    plugins:{
+      legend:{display:false},
+      tooltip:{callbacks:{label:c=>' YTD Actual: '+fmt(c.parsed.x)}}
+    },
+    scales:{
+      x:{ticks:{callback:v=>fmt(v)}, grid:{color:'#e8e8f033'}},
+      y:{grid:{display:false}, ticks:{font:{size:12}}}
+    }
   });
 }
 
 function renderAcctChart(rows) {
-  const gr = grossRows(rows);
   const agMap = {};
-  for (const r of gr) {
+  for (const r of rows) {
     const k = r.AcctGroup || 'Other';
     if (!agMap[k]) agMap[k] = {act:0,plan:0};
     agMap[k].act  += r.TotalCosts;
@@ -1086,9 +1366,8 @@ function renderAcctChart(rows) {
 }
 
 function renderAcctProgress(rows) {
-  const gr = grossRows(rows);
   const agMap = {};
-  for (const r of gr) { const k = r.AcctGroup||'Other'; agMap[k]=(agMap[k]||0)+r.TotalCosts; }
+  for (const r of rows) { const k = r.AcctGroup||'Other'; agMap[k]=(agMap[k]||0)+r.TotalCosts; }
   const total = Object.values(agMap).reduce((a,b)=>a+b,0)||1;
   const sorted = Object.entries(agMap).sort((a,b)=>b[1]-a[1]);
   document.getElementById('acct-progress').innerHTML = sorted.map(([lbl,val]) => {
@@ -1102,10 +1381,73 @@ function renderAcctProgress(rows) {
   }).join('');
 }
 
+function renderAGDrillTable(rows) {
+  // Build 3-level hierarchy: Account Group > Account Subgroup > Account (Account field)
+  const h = {};
+  for (const r of rows) {
+    const ag  = r.AcctGroup    || 'Unknown';
+    const sg  = r.AcctSubgroup || 'Unknown';
+    const acc = r.Account      || 'Unknown';
+    if (!h[ag]) h[ag] = { _totals: zeroFin(), _children: {} };
+    addFin(h[ag]._totals, r);
+    if (!h[ag]._children[sg]) h[ag]._children[sg] = { _totals: zeroFin(), _children: {} };
+    addFin(h[ag]._children[sg]._totals, r);
+    if (!h[ag]._children[sg]._children[acc]) h[ag]._children[sg]._children[acc] = zeroFin();
+    addFin(h[ag]._children[sg]._children[acc], r);
+  }
+
+  const totals = zeroFin();
+  Object.values(h).forEach(d => addFin(totals, null, d._totals));
+
+  let html = '';
+  let idx = 0;
+  const sortedAG = Object.entries(h).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
+  for (const [ag, agData] of sortedAG) {
+    const agKey = 'agd_' + (idx++);
+    html += hierRow(ag, agData._totals, 0, agKey, true);
+    const sortedSG = Object.entries(agData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
+    for (const [sg, sgData] of sortedSG) {
+      const sgKey = agKey + '_sg' + (idx++);
+      html += hierRow(sg, sgData._totals, 1, sgKey, false, agKey);
+      const sortedAcc = Object.entries(sgData._children).sort((a,b) => b[1].TotalCosts - a[1].TotalCosts);
+      for (const [acc, accTotals] of sortedAcc) {
+        html += hierRow(acc, accTotals, 2, '', false, sgKey, true);
+      }
+    }
+  }
+  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDg(totals.VarPlan)}${numTDg(totals.VarFcst)}</tr>`;
+  document.getElementById('ag-drill-tbody').innerHTML = html;
+}
+
+function renderGrossRecovChart(rows) {
+  // Group by Account Group, split gross vs recoveries
+  const agMap = {};
+  for (const r of rows) {
+    const k = r.AcctGroup || 'Other';
+    const isGross = r.GrossRecov && r.GrossRecov.toLowerCase() === 'gross';
+    const isRecov = r.GrossRecov && r.GrossRecov.toLowerCase().includes('recov');
+    if (!agMap[k]) agMap[k] = { gross: 0, recov: 0 };
+    if (isGross) agMap[k].gross += r.TotalCosts;
+    if (isRecov) agMap[k].recov += r.TotalCosts;
+  }
+  const sorted = Object.entries(agMap).sort((a,b) => Math.abs(b[1].gross) - Math.abs(a[1].gross));
+  const labels = sorted.map(([k]) => k);
+  mkChart('grossRecovChart','bar',{
+    labels,
+    datasets:[
+      {label:'Gross',      data:sorted.map(([,d])=>d.gross), backgroundColor:GREEN+'cc', borderRadius:4},
+      {label:'Recoveries', data:sorted.map(([,d])=>d.recov), backgroundColor:RED+'99',   borderRadius:4},
+    ]
+  },{
+    responsive:true,maintainAspectRatio:true,
+    plugins:{legend:{position:'top',align:'end'},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y)}}},
+    scales:{y:{ticks:{callback:v=>fmt(v)},grid:{color:'#e8e8f033'}},x:{grid:{display:false},ticks:{maxRotation:30}}}
+  });
+}
+
 function renderSLBar(rows) {
-  const gr = grossRows(rows);
   const slMap = {};
-  for (const r of gr) {
+  for (const r of rows) {
     const k = r.ServiceLine||'Unknown';
     if (!slMap[k]) slMap[k]={act:0,plan:0};
     slMap[k].act  += r.TotalCosts;
@@ -1128,18 +1470,136 @@ function renderSLBar(rows) {
   });
 }
 
-function renderVariance(rows) {
-  // Build Account Group -> Subgroup aggregation (all rows, not just gross)
+function renderVarianceAllSA() {
+  const container = document.getElementById('variance-sa-container');
+  const navLinks  = document.getElementById('var-nav-links');
+  if (!container) return;
+
+  // Use ALL_ROWS for variance — not affected by SA filter, but respect FP filter
+  let varRows = ALL_ROWS;
+  if (!FP_SELECTED.has('ALL') && FP_SELECTED.size > 0) {
+    const maxP = Math.max(...FP_SELECTED);
+    varRows = ALL_ROWS.filter(r => r.FiscalPeriod <= maxP);
+  }
+
+  const serviceAreas = [...new Set(varRows.map(r => r.ServiceArea).filter(Boolean))].sort();
+  if (!serviceAreas.length) {
+    container.innerHTML = `<div class="card"><div style="text-align:center;padding:40px;color:var(--g600)">No data available</div></div>`;
+    if (navLinks) navLinks.innerHTML = '';
+    return;
+  }
+
+  // Build navigator links
+  if (navLinks) {
+    navLinks.innerHTML = serviceAreas.map(sa => {
+      const anchor = 'var-sa-' + sa.replace(/[^a-z0-9]/gi, '_');
+      const saEsc  = sa.replace(/'/g, "\\'");
+      return '<a class="var-nav-link" href="#" onclick="varNavClick(\'' + anchor + '\',this);return false;" id="navlink-' + anchor + '" title="' + saEsc + '">' + saEsc + '</a>';
+    }).join('');
+  }
+
+  container.innerHTML = serviceAreas.map(sa => {
+    const anchor  = 'var-sa-' + sa.replace(/[^a-z0-9]/gi, '_');
+    const tbodyId = 'var-tbody-' + sa.replace(/[^a-z0-9]/gi,'_');
+    const saDisp  = sa.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `
+    <div class="full-col card" id="${anchor}" style="margin-bottom:20px;scroll-margin-top:16px">
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Variance Analysis — ${saDisp}</span>
+        <div style="display:flex;gap:6px">
+          <button onclick="varExpandSA('${anchor}')" style="background:var(--lgreen);color:var(--dgreen);border:1px solid var(--mgreen);border-radius:5px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer">▼ Expand</button>
+          <button onclick="varCollapseSA('${anchor}')" style="background:var(--g100);color:var(--g600);border:1px solid var(--g200);border-radius:5px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer">▶ Collapse</button>
+        </div>
+      </div>
+      <div class="tbl-wrap" style="max-height:600px;overflow-y:auto">
+        <table>
+          <thead><tr>
+            <th style="text-align:left;min-width:220px">Account Group / Subgroup</th>
+            <th>YTD Actual</th><th>YTD Plan</th>
+            <th>Act vs Plan ($)</th><th>Act vs Plan (%)</th>
+            <th style="min-width:280px;text-align:left">Variance Commentary</th>
+          </tr></thead>
+          <tbody id="${tbodyId}"></tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  serviceAreas.forEach(sa => {
+    const saRows = varRows.filter(r => r.ServiceArea === sa);
+    _renderVarianceForSA(sa, saRows);
+  });
+
+  // Scroll-spy: highlight nav link as user scrolls
+  _varScrollSpySetup(serviceAreas);
+}
+
+function varNavClick(anchor, el) {
+  const target = document.getElementById(anchor);
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('.var-nav-link').forEach(a => a.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function _varScrollSpySetup(serviceAreas) {
+  // Use IntersectionObserver to highlight the nav link for the visible section
+  if (window._varObserver) window._varObserver.disconnect();
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const anchor = entry.target.id;
+        document.querySelectorAll('.var-nav-link').forEach(a => a.classList.remove('active'));
+        const link = document.getElementById('navlink-' + anchor);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { threshold: 0.15 });
+  serviceAreas.forEach(sa => {
+    const anchor = 'var-sa-' + sa.replace(/[^a-z0-9]/gi,'_');
+    const el = document.getElementById(anchor);
+    if (el) observer.observe(el);
+  });
+  window._varObserver = observer;
+}
+
+// Global expand/collapse all subrows across all SA tables
+function varExpandAll() {
+  document.querySelectorAll('#variance-sa-container tr.ag-subrow').forEach(r => r.style.display = '');
+  document.querySelectorAll('#variance-sa-container .ag-toggle').forEach(t => t.textContent = '▼');
+}
+function varCollapseAll() {
+  document.querySelectorAll('#variance-sa-container tr.ag-subrow').forEach(r => r.style.display = 'none');
+  document.querySelectorAll('#variance-sa-container .ag-toggle').forEach(t => t.textContent = '▶');
+}
+
+// Per-SA expand/collapse
+function varExpandSA(anchor) {
+  const card = document.getElementById(anchor);
+  if (!card) return;
+  card.querySelectorAll('tr.ag-subrow').forEach(r => r.style.display = '');
+  card.querySelectorAll('.ag-toggle').forEach(t => t.textContent = '▼');
+}
+function varCollapseSA(anchor) {
+  const card = document.getElementById(anchor);
+  if (!card) return;
+  card.querySelectorAll('tr.ag-subrow').forEach(r => r.style.display = 'none');
+  card.querySelectorAll('.ag-toggle').forEach(t => t.textContent = '▶');
+}
+
+function _renderVarianceForSA(sa, rows) {
+  const tbodyId = 'var-tbody-' + sa.replace(/[^a-z0-9]/gi,'_');
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+
   const agMap = {};
   const zeroT = () => ({ act:0, plan:0 });
-
   for (const r of rows) {
     const ag = r.AcctGroup || 'Other';
     const sg = r.AcctSubgroup || 'Other';
     if (!agMap[ag]) agMap[ag] = { totals: zeroT(), subgroups: {} };
     if (!agMap[ag].subgroups[sg]) agMap[ag].subgroups[sg] = zeroT();
-    agMap[ag].totals.act   += r.TotalCosts;
-    agMap[ag].totals.plan  += r.PlanCosts;
+    agMap[ag].totals.act  += r.TotalCosts;
+    agMap[ag].totals.plan += r.PlanCosts;
     agMap[ag].subgroups[sg].act  += r.TotalCosts;
     agMap[ag].subgroups[sg].plan += r.PlanCosts;
   }
@@ -1149,49 +1609,45 @@ function renderVariance(rows) {
   const grandVar  = grandAct - grandPlan;
   const grandPct  = grandPlan !== 0 ? (grandVar/grandPlan*100) : 0;
 
-  // Sort AG by |variance| desc
-  const sortedAG = Object.entries(agMap).sort((a,b) => Math.abs(b[1].totals.act - b[1].totals.plan) - Math.abs(a[1].totals.act - a[1].totals.plan));
+  const sortedAG = Object.entries(agMap).sort((a,b) =>
+    Math.abs(b[1].totals.act - b[1].totals.plan) - Math.abs(a[1].totals.act - a[1].totals.plan));
 
-  const varRow = (label, act, plan, indent, grpKey, isAG, parentAG='') => {
+  const saKey = sa.replace(/[^a-z0-9]/gi,'_');
+
+  const varRow = (label, act, plan, indent, grpKey, isAG, parentAG) => {
+    parentAG = parentAG || '';
     const v   = act - plan;
     const pct = plan !== 0 ? v/plan*100 : 0;
     const vc  = v < 0 ? 'neg' : (v > 0 ? 'pos' : '');
-    // Look up commentary: for AG rows use AG key; for SG rows use AG|SG key
-    const commentary = isAG 
-      ? getCommentary(label, '', SA_FILTER_STR()) 
-      : getCommentary(parentAG || '', label, SA_FILTER_STR());
+    const normCommentary = isAG ? getCommentary(label,'',sa) : getCommentary(parentAG,label,sa);
+    const cmtDataKey = isAG ? label : parentAG + '|' + label;
+    const trClass    = isAG ? 'class="subtotal"' : 'class="ag-subrow" data-grp="' + grpKey + '"';
     const labelTd = isAG
-      ? `<td style="font-weight:700;cursor:pointer;padding-left:12px" onclick="toggleAGRows('${grpKey}')">
-           <span class="ag-toggle" id="tog-${grpKey}">▶</span>${label}
-         </td>`
-      : `<td style="padding-left:30px;color:var(--g700)">${label}</td>`;
-    return `<tr class="${isAG ? 'subtotal' : ('ag-subrow '+grpKey)}" ${!isAG ? 'style="display:none"' : ''}>
-      ${labelTd}
-      <td class="num">${fmt(act)}</td>
-      <td class="num">${fmt(plan)}</td>
-      <td class="num ${vc}">${fmt(v)}</td>
-      <td class="num ${vc}">${plan!==0 ? (pct>0?'+':'') + pct.toFixed(1)+'%' : '-'}</td>
-      <td contenteditable="true" 
-           data-key="${isAG ? label : (parentAG+'|'+label)}"
-           style="font-size:11px;color:var(--g600);font-style:${commentary?'normal':'italic'};
-                  min-width:200px;outline:none;cursor:text;${isAG?'font-weight:600':'padding-left:30px'}"
-           title="Click to add/edit commentary"
-           oninput="VAR_COMMENTARY[this.dataset.key]=this.innerText.trim();markDirty()"
-           onblur="VAR_COMMENTARY[this.dataset.key]=this.innerText.trim();_cmtAutoSave()"
-           >${commentary || (isAG ? `<span style='color:var(--mgreen);font-style:italic'>Click to add commentary…</span>` : '')}</td>
-    </tr>`;
+      ? '<td style="font-weight:700;cursor:pointer;padding-left:12px" onclick="toggleAGRows(\'' + grpKey + '\', this)"><span class="ag-toggle" id="tog-' + grpKey + '">▼</span>' + label + '</td>'
+      : '<td style="padding-left:30px;color:var(--g700)">' + label + '</td>';
+    const cmtPlaceholder = isAG ? '<span style="color:var(--mgreen);font-style:italic">Click to add commentary\u2026</span>' : '';
+    const cmtContent  = normCommentary || cmtPlaceholder;
+    const cmtStyle = 'font-size:11px;color:var(--g600);font-style:' + (normCommentary?'normal':'italic') + ';min-width:200px;outline:none;cursor:text;' + (isAG?'font-weight:600':'padding-left:30px');
+    return '<tr ' + trClass + '>' +
+      labelTd +
+      '<td class="num">' + fmt(act) + '</td>' +
+      '<td class="num">' + fmt(plan) + '</td>' +
+      '<td class="num ' + vc + '">' + fmt(v) + '</td>' +
+      '<td class="num ' + vc + '">' + (plan!==0 ? (pct>0?'+':'') + pct.toFixed(1)+'%' : '-') + '</td>' +
+      '<td contenteditable="true" data-sa="' + sa + '" data-key="' + cmtDataKey + '" style="' + cmtStyle + '" title="Click to add/edit commentary" oninput="saveVarCmt(this)" onblur="saveVarCmt(this);_cmtAutoSave()">' + cmtContent + '</td>' +
+      '</tr>';
   };
 
   let html = '';
   for (const [ag, agData] of sortedAG) {
-    const grpKey = 'ag_' + ag.replace(/[^a-z0-9]/gi,'_');
+    const grpKey = 'ag_' + saKey + '_' + ag.replace(/[^a-z0-9]/gi,'_');
     html += varRow(ag, agData.totals.act, agData.totals.plan, false, grpKey, true);
-    const sortedSG = Object.entries(agData.subgroups).sort((a,b) => Math.abs(b[1].act-b[1].plan) - Math.abs(a[1].act-a[1].plan));
+    const sortedSG = Object.entries(agData.subgroups).sort((a,b) =>
+      Math.abs(b[1].act-b[1].plan) - Math.abs(a[1].act-a[1].plan));
     for (const [sg, sd] of sortedSG) {
       html += varRow(sg, sd.act, sd.plan, true, grpKey, false, ag);
     }
   }
-  // Grand Total
   html += `<tr class="grand-total">
     <td>Grand Total</td>
     <td class="num">${fmt(grandAct)}</td>
@@ -1200,17 +1656,27 @@ function renderVariance(rows) {
     <td class="num ${grandVar<0?'neg-g':grandVar>0?'pos-g':''}">${grandPlan!==0?(grandPct>0?'+':'')+grandPct.toFixed(1)+'%':'-'}</td>
     <td></td>
   </tr>`;
-
-  const tbody = document.getElementById('var-tbody');
-  if (tbody) tbody.innerHTML = html;
+  tbody.innerHTML = html;
 }
 
-function toggleAGRows(grpKey) {
-  const rows = document.querySelectorAll('.' + grpKey);
+function saveVarCmt(el) {
+  const sa  = el.dataset.sa  || '';
+  const key = el.dataset.key || '';
+  const fullKey = sa ? `${sa}|${key}` : key;
+  VAR_COMMENTARY[fullKey] = el.innerText.trim();
+  markDirty();
+}
+
+function toggleAGRows(grpKey, tdEl) {
+  // Scope lookup to the containing table to avoid cross-SA conflicts
+  const tbl = tdEl ? tdEl.closest('table') : null;
+  const rows = tbl
+    ? tbl.querySelectorAll(`tr.ag-subrow[data-grp="${grpKey}"]`)
+    : document.querySelectorAll(`tr.ag-subrow[data-grp="${grpKey}"]`);
   const tog = document.getElementById('tog-' + grpKey);
-  const isHidden = rows.length > 0 && rows[0].style.display === 'none';
-  rows.forEach(r => r.style.display = isHidden ? '' : 'none');
-  if (tog) tog.textContent = isHidden ? '▼' : '▶';
+  const isVisible = rows.length > 0 && rows[0].style.display !== 'none';
+  rows.forEach(r => r.style.display = isVisible ? 'none' : '');
+  if (tog) tog.textContent = isVisible ? '▶' : '▼';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1226,33 +1692,23 @@ function numTDg(v) { // for grand total rows
 }
 
 function renderAGTable(rows) {
-  const gr = grossRows(rows);
-  const recov = rows.filter(r => r.GrossRecov && r.GrossRecov.toLowerCase().includes('recov'));
-
-  // Sub-rows by Account Group (gross only)
+  // rows are already GR-filtered by filteredRows(). Build account group map directly.
   const agMap = {};
-  for (const r of gr) {
+  for (const r of rows) {
     const k = r.AcctGroup || 'Other';
     if (!agMap[k]) agMap[k] = { TotalCosts:0, AnnualFcst:0, PlanCosts:0, AnnualPlan:0, YTDFcst:0, VarPlan:0, VarFcst:0 };
     FIN_FIELDS.forEach(f => agMap[k][f] += r[f]);
   }
 
-  const grossTotals = { TotalCosts:0, AnnualFcst:0, PlanCosts:0, AnnualPlan:0, YTDFcst:0, VarPlan:0, VarFcst:0 };
-  Object.values(agMap).forEach(d => FIN_FIELDS.forEach(f => grossTotals[f] += d[f]));
-
-  const recovTotals = { TotalCosts:0, AnnualFcst:0, PlanCosts:0, AnnualPlan:0, YTDFcst:0, VarPlan:0, VarFcst:0 };
-  for (const r of recov) FIN_FIELDS.forEach(f => recovTotals[f] += r[f]);
-
-  const grandTotals = {};
-  FIN_FIELDS.forEach(f => grandTotals[f] = grossTotals[f] + recovTotals[f]);
+  const grandTotals = { TotalCosts:0, AnnualFcst:0, PlanCosts:0, AnnualPlan:0, YTDFcst:0, VarPlan:0, VarFcst:0 };
+  Object.values(agMap).forEach(d => FIN_FIELDS.forEach(f => grandTotals[f] += d[f]));
 
   const sortedAG = Object.entries(agMap).sort((a,b)=>b[1].TotalCosts-a[1].TotalCosts);
 
-  let html = `<tr class="subtotal"><td>Gross</td>${numTD(grossTotals.AnnualPlan)}${numTD(grossTotals.AnnualFcst)}${numTD(grossTotals.PlanCosts)}${numTD(grossTotals.YTDFcst)}${numTD(grossTotals.TotalCosts)}${numTD(grossTotals.VarPlan)}${numTD(grossTotals.VarFcst)}</tr>`;
+  let html = '';
   for (const [ag, d] of sortedAG) {
-    html += `<tr class="indent"><td>${ag}</td>${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTD(d.VarPlan)}${numTD(d.VarFcst)}</tr>`;
+    html += `<tr><td style="font-weight:600">${ag}</td>${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTD(d.VarPlan)}${numTD(d.VarFcst)}</tr>`;
   }
-  html += `<tr class="subtotal"><td>Recoveries</td>${numTD(recovTotals.AnnualPlan)}${numTD(recovTotals.AnnualFcst)}${numTD(recovTotals.PlanCosts)}${numTD(recovTotals.YTDFcst)}${numTD(recovTotals.TotalCosts)}${numTD(recovTotals.VarPlan)}${numTD(recovTotals.VarFcst)}</tr>`;
   html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(grandTotals.AnnualPlan)}${numTDg(grandTotals.AnnualFcst)}${numTDg(grandTotals.PlanCosts)}${numTDg(grandTotals.YTDFcst)}${numTDg(grandTotals.TotalCosts)}${numTDg(grandTotals.VarPlan)}${numTDg(grandTotals.VarFcst)}</tr>`;
 
   document.getElementById('ag-tbody').innerHTML = html;
@@ -1276,23 +1732,178 @@ function renderWBSTable(rows) {
   document.getElementById('wbs-tbody').innerHTML = html;
 }
 
-function renderSLTable(rows) {
-  const gr = grossRows(rows);
-  const slMap = {};
-  for (const r of gr) {
-    const k = r.ServiceLine||'Unknown';
-    if (!slMap[k]) slMap[k] = { TotalCosts:0, AnnualFcst:0, PlanCosts:0, AnnualPlan:0, YTDFcst:0, VarPlan:0, VarFcst:0 };
-    FIN_FIELDS.forEach(f => slMap[k][f] += r[f]);
-  }
-  const totals = { TotalCosts:0, AnnualFcst:0, PlanCosts:0, AnnualPlan:0, YTDFcst:0, VarPlan:0, VarFcst:0 };
-  Object.values(slMap).forEach(d => FIN_FIELDS.forEach(f => totals[f] += d[f]));
+// ── Path switcher ──────────────────────────────────────────────
+function setSLPath(idx) {
+  SL_PATH = idx;
+  [0, 1].forEach(i => {
+    const btn = document.getElementById('sl-path-btn-' + i);
+    if (btn) btn.classList.toggle('active', i === idx);
+  });
+  const hints = [
+    'Click a row to expand: Service Area → Service Line → Cost Center',
+    'Click a row to expand: Service Line → Portfolio → Program → Product → Project'
+  ];
+  const hint = document.getElementById('sl-path-hint');
+  if (hint) hint.textContent = hints[idx];
+  renderSLTable(filteredRows());
+}
 
-  const sorted = Object.entries(slMap).sort((a,b)=>Math.abs(b[1].VarPlan)-Math.abs(a[1].VarPlan));
-  let html = sorted.map(([sl,d]) =>
-    `<tr><td style="font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis" title="${sl}">${sl}</td>${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTD(d.VarPlan)}${numTD(d.VarFcst)}</tr>`
-  ).join('');
+function renderSLTable(rows) {
+  // rows are already GR-filtered by filteredRows() — pass directly, no grossRows() call
+  if (SL_PATH === 0) {
+    _renderSLTablePath0(rows);
+  } else {
+    _renderSLTablePath1(rows);
+  }
+}
+
+function _buildHierarchy3(rows, keyFns) {
+  // keyFns = [fn0, fn1, fn2] — up to 3 levels (level 2 is leaf)
+  const h = {};
+  for (const r of rows) {
+    const k0 = keyFns[0](r) || 'Unknown';
+    const k1 = keyFns[1](r) || 'Unknown';
+    const k2 = keyFns.length > 2 ? (keyFns[2](r) || 'Unknown') : null;
+    if (!h[k0]) h[k0] = { _totals: zeroFin(), _children: {} };
+    addFin(h[k0]._totals, r);
+    if (!h[k0]._children[k1]) h[k0]._children[k1] = { _totals: zeroFin(), _children: {} };
+    addFin(h[k0]._children[k1]._totals, r);
+    if (k2 !== null) {
+      if (!h[k0]._children[k1]._children[k2]) h[k0]._children[k1]._children[k2] = zeroFin();
+      addFin(h[k0]._children[k1]._children[k2], r);
+    }
+  }
+  return h;
+}
+
+function _renderSLTablePath0(rows) {
+  // Service Area → Service Line → Cost Center
+  const h = _buildHierarchy3(rows,
+    [r => r.ServiceArea, r => r.ServiceLine, r => r.CostCenter]);
+
+  const totals = zeroFin();
+  Object.values(h).forEach(d => addFin(totals, null, d._totals));
+
+  let html = '';
+  let idx = 0;
+  const sortedSA = Object.entries(h).sort((a,b) => Math.abs(b[1]._totals.VarPlan) - Math.abs(a[1]._totals.VarPlan));
+  for (const [sa, saData] of sortedSA) {
+    const saKey = 'sl_' + (idx++);
+    html += hierRow(sa, saData._totals, 0, saKey, true);
+    const sortedSL = Object.entries(saData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
+    for (const [sl, slData] of sortedSL) {
+      const slKey = saKey + '_s' + (idx++);
+      html += hierRow(sl, slData._totals, 1, slKey, false, saKey);
+      const sortedCC = Object.entries(slData._children).sort((a,b) => b[1].TotalCosts - a[1].TotalCosts);
+      for (const [cc, ccTotals] of sortedCC) {
+        html += hierRow(cc, ccTotals, 2, '', false, slKey, true);
+      }
+    }
+  }
   html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDg(totals.VarPlan)}${numTDg(totals.VarFcst)}</tr>`;
   document.getElementById('sl-tbody').innerHTML = html;
+}
+
+function _renderSLTablePath1(rows) {
+  // Service Line → Portfolio → Program → Product → Project (Division)
+  const h = {};
+  for (const r of rows) {
+    const sl   = r.ServiceLine  || 'Unknown';
+    const port = r.Portfolio    || 'Unknown';
+    const prog = r.ProgramName  || 'Unknown';
+    const prod = r.Product      || r.Portfolio || 'Unknown';
+    const proj = r.Division     || 'Unknown';
+
+    if (!h[sl]) h[sl] = { _totals: zeroFin(), _children: {} };
+    addFin(h[sl]._totals, r);
+
+    if (!h[sl]._children[port]) h[sl]._children[port] = { _totals: zeroFin(), _children: {} };
+    addFin(h[sl]._children[port]._totals, r);
+
+    if (!h[sl]._children[port]._children[prog]) h[sl]._children[port]._children[prog] = { _totals: zeroFin(), _children: {} };
+    addFin(h[sl]._children[port]._children[prog]._totals, r);
+
+    if (!h[sl]._children[port]._children[prog]._children[prod]) h[sl]._children[port]._children[prog]._children[prod] = { _totals: zeroFin(), _children: {} };
+    addFin(h[sl]._children[port]._children[prog]._children[prod]._totals, r);
+
+    if (!h[sl]._children[port]._children[prog]._children[prod]._children[proj]) h[sl]._children[port]._children[prog]._children[prod]._children[proj] = zeroFin();
+    addFin(h[sl]._children[port]._children[prog]._children[prod]._children[proj], r);
+  }
+
+  const totals = zeroFin();
+  Object.values(h).forEach(d => addFin(totals, null, d._totals));
+
+  let html = '';
+  let idx = 0;
+  const sortedSL = Object.entries(h).sort((a,b) => Math.abs(b[1]._totals.VarPlan) - Math.abs(a[1]._totals.VarPlan));
+  for (const [sl, slData] of sortedSL) {
+    const slKey = 'sl_' + (idx++);
+    html += hierRow(sl, slData._totals, 0, slKey, true);
+    const sortedPort = Object.entries(slData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
+    for (const [port, portData] of sortedPort) {
+      const portKey = slKey + '_o' + (idx++);
+      html += hierRow(port, portData._totals, 1, portKey, false, slKey);
+      const sortedProg = Object.entries(portData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
+      for (const [prog, progData] of sortedProg) {
+        const progKey = portKey + '_g' + (idx++);
+        html += hierRow(prog, progData._totals, 2, progKey, false, portKey);
+        const sortedProd = Object.entries(progData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
+        for (const [prod, prodData] of sortedProd) {
+          const prodKey = progKey + '_d' + (idx++);
+          html += hierRow(prod, prodData._totals, 3, prodKey, false, progKey);
+          const sortedProj = Object.entries(prodData._children).sort((a,b) => b[1].TotalCosts - a[1].TotalCosts);
+          for (const [proj, projTotals] of sortedProj) {
+            html += hierRow(proj, projTotals, 4, '', false, prodKey, true);
+          }
+        }
+      }
+    }
+  }
+  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDg(totals.VarPlan)}${numTDg(totals.VarFcst)}</tr>`;
+  document.getElementById('sl-tbody').innerHTML = html;
+}
+
+function zeroFin() { return { TotalCosts:0, AnnualFcst:0, PlanCosts:0, AnnualPlan:0, YTDFcst:0, VarPlan:0, VarFcst:0 }; }
+function addFin(target, row, src) {
+  const s = src || row;
+  FIN_FIELDS.forEach(f => target[f] += (s[f] || 0));
+}
+
+function hierRow(label, d, depth, key, isTop, parentKey, isLeaf) {
+  const indent = depth * 18;
+  const hasChildren = !isLeaf;
+  const prefix = hasChildren ? `<span class="ag-toggle" id="tog-${key}" style="cursor:pointer" onclick="toggleHierRows('${key}')">▶</span>` : '<span style="display:inline-block;width:16px"></span>';
+  const weight = isTop ? '800' : depth < 2 ? '700' : depth < 3 ? '600' : '400';
+  const bgStyle = isTop ? 'background:var(--lgreen)' : '';
+  const displayStyle = isTop ? '' : `style="display:none"`;
+  const parentClass = parentKey ? `hier-child-${parentKey}` : '';
+  const ownClass = key ? `hier-parent-${key}` : '';
+  return `<tr class="${parentClass} ${ownClass}" ${!isTop ? displayStyle : ''} data-depth="${depth}">
+    <td style="padding-left:${12+indent}px;font-weight:${weight};max-width:280px;overflow:hidden;text-overflow:ellipsis;${bgStyle}" title="${label}">${prefix}${label}</td>
+    ${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTD(d.VarPlan)}${numTD(d.VarFcst)}
+  </tr>`;
+}
+
+function toggleHierRows(key) {
+  const tog = document.getElementById('tog-' + key);
+  const children = document.querySelectorAll('.hier-child-' + key);
+  const isHidden = children.length > 0 && children[0].style.display === 'none';
+  children.forEach(r => {
+    if (isHidden) {
+      r.style.display = '';
+    } else {
+      r.style.display = 'none';
+      // Also collapse any nested open children
+      const childKey = [...r.classList].find(c => c.startsWith('hier-parent-'));
+      if (childKey) {
+        const ck = childKey.replace('hier-parent-','');
+        const tog2 = document.getElementById('tog-'+ck);
+        if (tog2) tog2.textContent = '▶';
+        document.querySelectorAll('.hier-child-'+ck).forEach(cr => cr.style.display='none');
+      }
+    }
+  });
+  if (tog) tog.textContent = isHidden ? '▼' : '▶';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1480,7 +2091,7 @@ function resetDashboard() {
 // ─── CONFIGURE THESE ─────────────────────────────────────────
 var GH_OWNER  = 'tbmreporting1';       // your GitHub username
 var GH_REPO   = 'Service-Area-Reports';       // your repo name
-var GH_TOK    = ['ghp_XpJ59HHI5z5BV0eRc', 'E8hjGREEDONNL3EvZL4']; // ['ghp_FIRST_HALF', 'SECOND_HALF']
+var GH_TOK    = ['ghp_S4k7dk8TbmKzVxui', 'EBAAZfoLjZDuKV4BEd6q']; // ['ghp_FIRST_HALF', 'SECOND_HALF']
 // ─────────────────────────────────────────────────────────────
 
 // Two separate files — rows file can be large, state file stays tiny
@@ -1689,14 +2300,14 @@ function loadSharedData(cb){
         var ghTs  = metaData && metaData.meta && metaData.meta.ts || '';
         var lsMeta= JSON.parse(localStorage.getItem(LS.meta)||'null');
         var lsTs  = lsMeta && lsMeta.ts || '';
-        if (rowData && rowData.P) {
-    _applyGHState(rowData, metaData);
-    renderAll();
-} else if (metaData && metaData.meta) {
-    _updateSaveTs(metaData.meta);
-    _updateSavedBy(metaData.meta);
-    _lastSavedTs = ghTs;
-}
+        if(!lsTs || ghTs > lsTs){
+          _applyGHState(rowData, metaData);
+          renderAll();
+        } else if(metaData && metaData.meta){
+          _updateSaveTs(metaData.meta);
+          _updateSavedBy(metaData.meta);
+          _lastSavedTs=ghTs;
+        }
       }
       setSyncStatus('ok');
       if(cb)cb();
@@ -1775,12 +2386,7 @@ function saveAllShared(){
 }
 
 // ── Comment auto-save (localStorage only) ─────────────────────
-function _cmtAutoSave(){
-    _lsSave();
-    markDirty();
-    clearTimeout(_cmtAutoSave._t);
-    _cmtAutoSave._t = setTimeout(function(){ saveAllShared(); }, 3000);
-}
+function _cmtAutoSave(){ _lsSave(); markDirty(); }
 
 // ── Poll for updates every 60 s ───────────────────────────────
 function _pollForUpdates(){
@@ -1865,7 +2471,7 @@ function showToast(msg,icon){
 initUserIdentity();
 var _hadLocalData = restoreUploadedData();
 if(_hadLocalData) renderAll();
-loadSharedData(function(){ renderAll(); });
+loadSharedData(function(){ if(!_hadLocalData) renderAll(); });
 setTimeout(_pollForUpdates, 10000);
 setInterval(_pollForUpdates, 60000);
 </script>
