@@ -295,6 +295,38 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
       </div>
     </div>
     <div class="divider"></div>
+    <div class="ctrl-group" id="sl-filter-group">
+      <span class="ctrl-label">Service Line</span>
+      <div class="ms-wrap" id="sl-ms-wrap">
+        <div class="ms-trigger" id="sl-ms-trigger" onclick="toggleSLDropdown()">
+          <span id="sl-ms-label">All Service Lines</span>
+        </div>
+        <div class="ms-dropdown" id="sl-ms-dropdown">
+          <div id="sl-ms-items"></div>
+          <div class="ms-actions">
+            <button class="ms-action-btn" onclick="slSelectAll()">Select All</button>
+            <button class="ms-action-btn" onclick="slClearAll()">Clear All</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="ctrl-group" id="region-filter-group">
+      <span class="ctrl-label">Region</span>
+      <div class="ms-wrap" id="region-ms-wrap">
+        <div class="ms-trigger" id="region-ms-trigger" onclick="toggleRegionDropdown()">
+          <span id="region-ms-label">All Regions</span>
+        </div>
+        <div class="ms-dropdown" id="region-ms-dropdown">
+          <div id="region-ms-items"></div>
+          <div class="ms-actions">
+            <button class="ms-action-btn" onclick="regionSelectAll()">Select All</button>
+            <button class="ms-action-btn" onclick="regionClearAll()">Clear All</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
     <div class="ctrl-group" id="gr-filter-group">
       <span class="ctrl-label">Gross / Recovery</span>
       <div class="toggle-group">
@@ -320,7 +352,7 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
     <!-- Row 1: Period Trend left half, Gross vs Recoveries right half -->
     <div class="two-col">
       <div class="card">
-        <div class="card-title">Period Trend — Actual vs Plan vs Forecast (Gross)</div>
+        <div class="card-title">Period Trend — Actual vs Plan vs Forecast</div>
         <div class="legend">
           <span class="legend-item"><span class="dot" style="background:#00A651"></span>Actual</span>
           <span class="legend-item"><span class="dot" style="background:#3182ce"></span>Plan</span>
@@ -836,6 +868,195 @@ function populateSAFilter() {
   SA_SELECTED = new Set(['ALL']);
   updateMSLabel();
   populateFPFilter();
+  populateSLFilter();
+  populateRegionFilter();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SERVICE LINE FILTER (scoped to the currently selected Service Area(s))
+// ═══════════════════════════════════════════════════════════════
+let SL_SELECTED = new Set(['ALL']); // 'ALL' means all selected
+
+function populateSLFilter() {
+  // Scope available Service Lines to the current Service Area selection
+  const scopeRows = (!SA_SELECTED.has('ALL') && SA_SELECTED.size > 0)
+    ? ALL_ROWS.filter(r => SA_SELECTED.has(r.ServiceArea))
+    : ALL_ROWS;
+  const lines = [...new Set(scopeRows.map(r => r.ServiceLine).filter(Boolean))].sort();
+  const container = document.getElementById('sl-ms-items');
+  if (!container) return;
+  container.innerHTML = '';
+  // "All" checkbox
+  const allItem = document.createElement('div');
+  allItem.className = 'ms-item';
+  allItem.innerHTML = `<input type="checkbox" id="sl-ms-all" checked onchange="slToggleAll(this)"><label for="sl-ms-all"><strong>All Service Lines</strong></label>`;
+  container.appendChild(allItem);
+  // Individual service lines (scoped to selected Service Area(s))
+  lines.forEach(sl => {
+    const div = document.createElement('div');
+    div.className = 'ms-item';
+    const id = 'sl-ms-' + sl.replace(/\s+/g,'_');
+    div.innerHTML = `<input type="checkbox" id="${id}" value="${sl}" checked onchange="slToggleItem(this)"><label for="${id}">${sl}</label>`;
+    container.appendChild(div);
+  });
+  // Re-scoping resets the Service Line selection to "All" within the new scope
+  SL_SELECTED = new Set(['ALL']);
+  updateSLLabel();
+}
+
+function toggleSLDropdown() {
+  document.getElementById('sl-ms-trigger').classList.toggle('open');
+  document.getElementById('sl-ms-dropdown').classList.toggle('open');
+}
+
+function slToggleAll(cb) {
+  const checkboxes = document.querySelectorAll('#sl-ms-items input[type=checkbox]:not(#sl-ms-all)');
+  checkboxes.forEach(c => c.checked = cb.checked);
+  SL_SELECTED = cb.checked ? new Set(['ALL']) : new Set();
+  updateSLLabel();
+  renderAll();
+}
+
+function slToggleItem(cb) {
+  const allCheckboxes = document.querySelectorAll('#sl-ms-items input[type=checkbox]:not(#sl-ms-all)');
+  const checked = [...allCheckboxes].filter(c => c.checked).map(c => c.value);
+  const allCb = document.getElementById('sl-ms-all');
+  if (checked.length === allCheckboxes.length) {
+    allCb.checked = true;
+    allCb.indeterminate = false;
+    SL_SELECTED = new Set(['ALL']);
+  } else if (checked.length === 0) {
+    allCb.checked = false;
+    allCb.indeterminate = false;
+    SL_SELECTED = new Set();
+  } else {
+    allCb.checked = false;
+    allCb.indeterminate = true;
+    SL_SELECTED = new Set(checked);
+  }
+  updateSLLabel();
+  renderAll();
+}
+
+function slSelectAll() {
+  document.querySelectorAll('#sl-ms-items input[type=checkbox]').forEach(c => c.checked = true);
+  const allCb = document.getElementById('sl-ms-all');
+  if (allCb) { allCb.checked = true; allCb.indeterminate = false; }
+  SL_SELECTED = new Set(['ALL']);
+  updateSLLabel();
+  renderAll();
+}
+
+function slClearAll() {
+  document.querySelectorAll('#sl-ms-items input[type=checkbox]').forEach(c => c.checked = false);
+  const allCb = document.getElementById('sl-ms-all');
+  if (allCb) { allCb.checked = false; allCb.indeterminate = false; }
+  SL_SELECTED = new Set();
+  updateSLLabel();
+  renderAll();
+}
+
+function updateSLLabel() {
+  const lbl = document.getElementById('sl-ms-label');
+  if (!lbl) return;
+  if (SL_SELECTED.has('ALL') || SL_SELECTED.size === 0) {
+    lbl.textContent = SL_SELECTED.size === 0 ? 'None selected' : 'All Service Lines';
+    return;
+  }
+  const arr = [...SL_SELECTED];
+  if (arr.length === 1) { lbl.innerHTML = `<span class="ms-tag">${arr[0]}</span>`; return; }
+  lbl.innerHTML = arr.slice(0,2).map(a=>`<span class="ms-tag">${a}</span>`).join(' ') + (arr.length > 2 ? ` <span class="ms-tag">+${arr.length-2}</span>` : '');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REGION FILTER (from "US/USI/Others" column, ITS Report Data tab)
+// ═══════════════════════════════════════════════════════════════
+let REGION_SELECTED = new Set(['ALL']); // 'ALL' means all selected
+
+function populateRegionFilter() {
+  const regions = [...new Set(ALL_ROWS.map(r => r.Region).filter(Boolean))].sort();
+  const container = document.getElementById('region-ms-items');
+  if (!container) return;
+  container.innerHTML = '';
+  // "All" checkbox
+  const allItem = document.createElement('div');
+  allItem.className = 'ms-item';
+  allItem.innerHTML = `<input type="checkbox" id="region-ms-all" checked onchange="regionToggleAll(this)"><label for="region-ms-all"><strong>All Regions</strong></label>`;
+  container.appendChild(allItem);
+  // Individual regions
+  regions.forEach(reg => {
+    const div = document.createElement('div');
+    div.className = 'ms-item';
+    const id = 'region-ms-' + reg.replace(/\s+/g,'_');
+    div.innerHTML = `<input type="checkbox" id="${id}" value="${reg}" checked onchange="regionToggleItem(this)"><label for="${id}">${reg}</label>`;
+    container.appendChild(div);
+  });
+  REGION_SELECTED = new Set(['ALL']);
+  updateRegionLabel();
+}
+
+function toggleRegionDropdown() {
+  document.getElementById('region-ms-trigger').classList.toggle('open');
+  document.getElementById('region-ms-dropdown').classList.toggle('open');
+}
+
+function regionToggleAll(cb) {
+  const checkboxes = document.querySelectorAll('#region-ms-items input[type=checkbox]:not(#region-ms-all)');
+  checkboxes.forEach(c => c.checked = cb.checked);
+  REGION_SELECTED = cb.checked ? new Set(['ALL']) : new Set();
+  updateRegionLabel();
+  renderAll();
+}
+
+function regionToggleItem(cb) {
+  const allCheckboxes = document.querySelectorAll('#region-ms-items input[type=checkbox]:not(#region-ms-all)');
+  const checked = [...allCheckboxes].filter(c => c.checked).map(c => c.value);
+  const allCb = document.getElementById('region-ms-all');
+  if (checked.length === allCheckboxes.length) {
+    allCb.checked = true;
+    allCb.indeterminate = false;
+    REGION_SELECTED = new Set(['ALL']);
+  } else if (checked.length === 0) {
+    allCb.checked = false;
+    allCb.indeterminate = false;
+    REGION_SELECTED = new Set();
+  } else {
+    allCb.checked = false;
+    allCb.indeterminate = true;
+    REGION_SELECTED = new Set(checked);
+  }
+  updateRegionLabel();
+  renderAll();
+}
+
+function regionSelectAll() {
+  document.querySelectorAll('#region-ms-items input[type=checkbox]').forEach(c => c.checked = true);
+  const allCb = document.getElementById('region-ms-all');
+  if (allCb) { allCb.checked = true; allCb.indeterminate = false; }
+  REGION_SELECTED = new Set(['ALL']);
+  updateRegionLabel();
+  renderAll();
+}
+
+function regionClearAll() {
+  document.querySelectorAll('#region-ms-items input[type=checkbox]').forEach(c => c.checked = false);
+  const allCb = document.getElementById('region-ms-all');
+  if (allCb) { allCb.checked = false; allCb.indeterminate = false; }
+  REGION_SELECTED = new Set();
+  updateRegionLabel();
+  renderAll();
+}
+
+function updateRegionLabel() {
+  const lbl = document.getElementById('region-ms-label');
+  if (!lbl) return;
+  if (REGION_SELECTED.has('ALL') || REGION_SELECTED.size === 0) {
+    lbl.textContent = REGION_SELECTED.size === 0 ? 'None selected' : 'All Regions';
+    return;
+  }
+  const arr = [...REGION_SELECTED];
+  if (arr.length === 1) { lbl.innerHTML = `<span class="ms-tag">${arr[0]}</span>`; return; }
+  lbl.innerHTML = arr.slice(0,2).map(a=>`<span class="ms-tag">${a}</span>`).join(' ') + (arr.length > 2 ? ` <span class="ms-tag">+${arr.length-2}</span>` : '');
 }
 
 function populateFPFilter() {
@@ -928,6 +1149,7 @@ function msToggleAll(cb) {
   checkboxes.forEach(c => c.checked = cb.checked);
   SA_SELECTED = cb.checked ? new Set(['ALL']) : new Set();
   updateMSLabel();
+  populateSLFilter();
   updateHeaderMeta();
   renderAll();
 }
@@ -950,6 +1172,7 @@ function msToggleItem(cb) {
     SA_SELECTED = new Set(checked);
   }
   updateMSLabel();
+  populateSLFilter();
   updateHeaderMeta();
   renderAll();
 }
@@ -960,6 +1183,7 @@ function msSelectAll() {
   if (allCb) { allCb.checked = true; allCb.indeterminate = false; }
   SA_SELECTED = new Set(['ALL']);
   updateMSLabel();
+  populateSLFilter();
   updateHeaderMeta();
   renderAll();
 }
@@ -970,6 +1194,7 @@ function msClearAll() {
   if (allCb) { allCb.checked = false; allCb.indeterminate = false; }
   SA_SELECTED = new Set();
   updateMSLabel();
+  populateSLFilter();
   updateHeaderMeta();
   renderAll();
 }
@@ -998,6 +1223,16 @@ document.addEventListener('click', e => {
     document.getElementById('fp-ms-trigger')?.classList.remove('open');
     document.getElementById('fp-ms-dropdown')?.classList.remove('open');
   }
+  const regionWrap = document.getElementById('region-ms-wrap');
+  if (regionWrap && !regionWrap.contains(e.target)) {
+    document.getElementById('region-ms-trigger')?.classList.remove('open');
+    document.getElementById('region-ms-dropdown')?.classList.remove('open');
+  }
+  const slWrap = document.getElementById('sl-ms-wrap');
+  if (slWrap && !slWrap.contains(e.target)) {
+    document.getElementById('sl-ms-trigger')?.classList.remove('open');
+    document.getElementById('sl-ms-dropdown')?.classList.remove('open');
+  }
 });
 
 function onSAChange() { renderAll(); }
@@ -1016,6 +1251,12 @@ function filteredRows() {
   // SA filter
   if (!SA_SELECTED.has('ALL') && SA_SELECTED.size > 0)
     rows = rows.filter(r => SA_SELECTED.has(r.ServiceArea));
+  // Service Line filter
+  if (!SL_SELECTED.has('ALL') && SL_SELECTED.size > 0)
+    rows = rows.filter(r => SL_SELECTED.has(r.ServiceLine));
+  // Region filter
+  if (!REGION_SELECTED.has('ALL') && REGION_SELECTED.size > 0)
+    rows = rows.filter(r => REGION_SELECTED.has(r.Region));
   // FP filter: include only rows up to and including the max selected period (YTD semantics)
   if (!FP_SELECTED.has('ALL') && FP_SELECTED.size > 0) {
     const maxP = Math.max(...FP_SELECTED);
@@ -1080,7 +1321,11 @@ function periodTrend(rows) {
   // Always show all 13 periods regardless of FP filter.
   let planRows = ALL_ROWS;
   if (!SA_SELECTED.has('ALL') && SA_SELECTED.size > 0)
-    planRows = ALL_ROWS.filter(r => SA_SELECTED.has(r.ServiceArea));
+    planRows = planRows.filter(r => SA_SELECTED.has(r.ServiceArea));
+  if (!SL_SELECTED.has('ALL') && SL_SELECTED.size > 0)
+    planRows = planRows.filter(r => SL_SELECTED.has(r.ServiceLine));
+  if (!REGION_SELECTED.has('ALL') && REGION_SELECTED.size > 0)
+    planRows = planRows.filter(r => REGION_SELECTED.has(r.Region));
   // Apply GR filter to plan rows too so they match the selected view
   if (GR_FILTER === 'GROSS')
     planRows = planRows.filter(r => r.GrossRecov && r.GrossRecov.toLowerCase() === 'gross');
@@ -2037,6 +2282,12 @@ function updateHeaderMeta() {
   const saLabel = SA_SELECTED.has('ALL') || SA_SELECTED.size === 0
     ? 'All Service Areas'
     : [...SA_SELECTED].join(', ');
+  const slLabel = SL_SELECTED.has('ALL') || SL_SELECTED.size === 0
+    ? 'All Service Lines'
+    : [...SL_SELECTED].join(', ');
+  const regionLabel = REGION_SELECTED.has('ALL') || REGION_SELECTED.size === 0
+    ? 'All Regions'
+    : [...REGION_SELECTED].join(', ');
   // Sync the period dropdown to FILE_META.period (display only — does not affect data)
   const sel = document.getElementById('badge-period');
   if (sel && FILE_META.period) {
@@ -2046,7 +2297,7 @@ function updateHeaderMeta() {
   const displayPeriod = (sel && sel.value) || FILE_META.period || '';
   document.getElementById('header-sub').textContent =
     (FILE_META.fy || 'Service Area Report') + (displayPeriod ? ' · ' + displayPeriod : '') +
-    ' · ' + saLabel + (FILE_META.name ? ' · Source: ' + FILE_META.name : '');
+    ' · ' + saLabel + ' · ' + slLabel + ' · ' + regionLabel + (FILE_META.name ? ' · Source: ' + FILE_META.name : '');
   document.getElementById('badge-fy').textContent = FILE_META.fy;
   document.getElementById('footer-info').textContent = FILE_META.fy + ' ' + displayPeriod + ' Close · ' + FILE_META.name;
 }
@@ -2167,7 +2418,7 @@ function _unpackRows(packed){
 var LS = {
   meta:'sar_meta', rowPack:'sar_rows_packed', ftePack:'sar_fte_packed',
   varCmt:'sar_var_cmt', currency:'sar_currency', fileMeta:'sar_file_meta',
-  saSet:'sar_sa_set', activity:'sar_activity'
+  saSet:'sar_sa_set', slSet:'sar_sl_set', regionSet:'sar_region_set', activity:'sar_activity'
 };
 
 function _lsSave(){
@@ -2179,6 +2430,8 @@ function _lsSave(){
     localStorage.setItem(LS.currency, CURRENCY);
     localStorage.setItem(LS.fileMeta, JSON.stringify(FILE_META));
     localStorage.setItem(LS.saSet,    JSON.stringify([...SA_SELECTED]));
+    localStorage.setItem(LS.slSet,    JSON.stringify([...SL_SELECTED]));
+    localStorage.setItem(LS.regionSet,JSON.stringify([...REGION_SELECTED]));
     localStorage.setItem(LS.activity, JSON.stringify(cachedActivity));
   }catch(e){ console.warn('[SAR] localStorage save error:',e); }
 }
@@ -2197,14 +2450,39 @@ function restoreUploadedData(){
     FILE_META      = JSON.parse(localStorage.getItem(LS.fileMeta)||'{}')||FILE_META;
     cachedActivity = JSON.parse(localStorage.getItem(LS.activity)||'[]')||[];
     var saArr      = JSON.parse(localStorage.getItem(LS.saSet)||'["ALL"]');
-    SA_SELECTED = new Set(saArr);
+    var slArr      = JSON.parse(localStorage.getItem(LS.slSet)||'["ALL"]');
+    var regionArr  = JSON.parse(localStorage.getItem(LS.regionSet)||'["ALL"]');
 
     populateSAFilter();
+
+    // Restore Service Area selection
+    SA_SELECTED = new Set(saArr);
     if(!SA_SELECTED.has('ALL') && SA_SELECTED.size>0){
       document.querySelectorAll('#ms-items input[type=checkbox]:not(#ms-all)')
         .forEach(function(cb){ cb.checked=SA_SELECTED.has(cb.value); });
       var ac=document.getElementById('ms-all');
       if(ac){ ac.checked=false; ac.indeterminate=true; }
+    }
+
+    // Re-scope Service Line options to the restored Service Area selection, then restore SL selection
+    populateSLFilter();
+    var validSl = new Set([...document.querySelectorAll('#sl-ms-items input[type=checkbox]:not(#sl-ms-all)')].map(function(cb){return cb.value;}));
+    SL_SELECTED = new Set(slArr.filter(function(v){ return v==='ALL' || validSl.has(v); }));
+    if(SL_SELECTED.size===0) SL_SELECTED = new Set(['ALL']);
+    if(!SL_SELECTED.has('ALL') && SL_SELECTED.size>0){
+      document.querySelectorAll('#sl-ms-items input[type=checkbox]:not(#sl-ms-all)')
+        .forEach(function(cb){ cb.checked=SL_SELECTED.has(cb.value); });
+      var slc=document.getElementById('sl-ms-all');
+      if(slc){ slc.checked=false; slc.indeterminate=true; }
+    }
+
+    // Restore Region selection (independent of SA/SL)
+    REGION_SELECTED = new Set(regionArr);
+    if(!REGION_SELECTED.has('ALL') && REGION_SELECTED.size>0){
+      document.querySelectorAll('#region-ms-items input[type=checkbox]:not(#region-ms-all)')
+        .forEach(function(cb){ cb.checked=REGION_SELECTED.has(cb.value); });
+      var arc=document.getElementById('region-ms-all');
+      if(arc){ arc.checked=false; arc.indeterminate=true; }
     }
     document.querySelectorAll('.toggle-btn')
       .forEach(function(b,i){ b.classList.toggle('active',['M','A'][i]===CURRENCY); });
@@ -2213,6 +2491,8 @@ function restoreUploadedData(){
     document.getElementById('upload-btn').textContent='↑ Load New File';
     updateHeaderMeta();
     updateMSLabel();
+    updateSLLabel();
+    updateRegionLabel();
     return true;
   }catch(e){ console.warn('[SAR] restoreUploadedData:',e); return false; }
 }
@@ -2268,13 +2548,38 @@ function _applyGHState(rowData, metaData){
       FILE_META      = metaData.fileMeta      || FILE_META;
       if(Array.isArray(metaData.activity)) cachedActivity=metaData.activity;
       var saArr=metaData.saSelected||['ALL'];
-      SA_SELECTED=new Set(saArr);
+      var slArr=metaData.slSelected||['ALL'];
+      var regionArr=metaData.regionSelected||['ALL'];
       populateSAFilter();
+
+      // Restore Service Area selection
+      SA_SELECTED=new Set(saArr);
       if(!SA_SELECTED.has('ALL') && SA_SELECTED.size>0){
         document.querySelectorAll('#ms-items input[type=checkbox]:not(#ms-all)')
           .forEach(function(cb){ cb.checked=SA_SELECTED.has(cb.value); });
         var ac=document.getElementById('ms-all');
         if(ac){ ac.checked=false; ac.indeterminate=true; }
+      }
+
+      // Re-scope Service Line options to the restored Service Area selection, then restore SL selection
+      populateSLFilter();
+      var validSl = new Set([...document.querySelectorAll('#sl-ms-items input[type=checkbox]:not(#sl-ms-all)')].map(function(cb){return cb.value;}));
+      SL_SELECTED = new Set(slArr.filter(function(v){ return v==='ALL' || validSl.has(v); }));
+      if(SL_SELECTED.size===0) SL_SELECTED = new Set(['ALL']);
+      if(!SL_SELECTED.has('ALL') && SL_SELECTED.size>0){
+        document.querySelectorAll('#sl-ms-items input[type=checkbox]:not(#sl-ms-all)')
+          .forEach(function(cb){ cb.checked=SL_SELECTED.has(cb.value); });
+        var slc=document.getElementById('sl-ms-all');
+        if(slc){ slc.checked=false; slc.indeterminate=true; }
+      }
+
+      // Restore Region selection (independent of SA/SL)
+      REGION_SELECTED=new Set(regionArr);
+      if(!REGION_SELECTED.has('ALL') && REGION_SELECTED.size>0){
+        document.querySelectorAll('#region-ms-items input[type=checkbox]:not(#region-ms-all)')
+          .forEach(function(cb){ cb.checked=REGION_SELECTED.has(cb.value); });
+        var arc=document.getElementById('region-ms-all');
+        if(arc){ arc.checked=false; arc.indeterminate=true; }
       }
       document.querySelectorAll('.toggle-btn')
         .forEach(function(b,i){ b.classList.toggle('active',['M','A'][i]===CURRENCY); });
@@ -2285,6 +2590,8 @@ function _applyGHState(rowData, metaData){
     document.getElementById('upload-btn').textContent='↑ Load New File';
     updateHeaderMeta();
     updateMSLabel();
+    updateSLLabel();
+    updateRegionLabel();
     _lsSave(); // mirror to localStorage for instant next-open
   }catch(e){ console.warn('[SAR] applyGHState:',e); }
 }
@@ -2332,8 +2639,10 @@ function saveAllShared(){
             author:currentAuthor||'User', color:'var(--green)'};
 
   var saLabel=SA_SELECTED.has('ALL')||SA_SELECTED.size===0?'All':[...SA_SELECTED].join(', ');
+  var slLabel=SL_SELECTED.has('ALL')||SL_SELECTED.size===0?'All':[...SL_SELECTED].join(', ');
+  var regionLabel=REGION_SELECTED.has('ALL')||REGION_SELECTED.size===0?'All':[...REGION_SELECTED].join(', ');
   cachedActivity.unshift({author:meta.author, ts:meta.ts, tsLocal:meta.tsLocal,
-    color:meta.color, filters:'SA: '+saLabel+' | $'+CURRENCY+' | Rows: '+ALL_ROWS.length.toLocaleString()});
+    color:meta.color, filters:'SA: '+saLabel+' | SL: '+slLabel+' | Region: '+regionLabel+' | $'+CURRENCY+' | Rows: '+ALL_ROWS.length.toLocaleString()});
   if(cachedActivity.length>MAX_ACTIVITY) cachedActivity=cachedActivity.slice(0,MAX_ACTIVITY);
 
   // Always persist to localStorage first
@@ -2350,7 +2659,7 @@ function saveAllShared(){
   var metaDoc = {                              // everything else (small)
     meta:meta, fteRows:FTE_ROWS, varCommentary:VAR_COMMENTARY,
     currency:CURRENCY, fileMeta:FILE_META,
-    saSelected:[...SA_SELECTED], activity:cachedActivity
+    saSelected:[...SA_SELECTED], slSelected:[...SL_SELECTED], regionSelected:[...REGION_SELECTED], activity:cachedActivity
   };
 
   // Use array wrappers so _ghPut can update the sha by reference
