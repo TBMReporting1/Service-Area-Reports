@@ -1348,7 +1348,7 @@ function periodTrend(rows) {
       if (out[r.FiscalPeriod].act === null) out[r.FiscalPeriod].act = 0;
       if (out[r.FiscalPeriod].fcst === null) out[r.FiscalPeriod].fcst = 0;
       out[r.FiscalPeriod].act  += r.TotalCosts;
-      out[r.FiscalPeriod].fcst += r.YTDFcst;
+      out[r.FiscalPeriod].fcst += r.AnnualFcst;
     }
   }
   return out;
