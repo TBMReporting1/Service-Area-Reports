@@ -124,15 +124,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;ba
 .page.active{display:block}
 
 /* ── KPIs ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:13px;margin-bottom:20px}
-.kpi{background:white;border-radius:var(--radius);padding:15px 17px;box-shadow:var(--shadow);border-top:3px solid var(--green);transition:transform .15s}
-.kpi:hover{transform:translateY(-2px)}
-.kpi.neg{border-top-color:var(--red)}
+.kpi-grid{display:grid;grid-template-columns:repeat(7,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+@media (max-width:1100px){.kpi-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}}
+.kpi{background:white;border-radius:var(--radius);padding:14px 15px;box-shadow:var(--shadow);border-top:3px solid var(--green);transition:transform .15s,box-shadow .15s}
+.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.10)}
 .kpi.blue{border-top-color:var(--blue)}
+.kpi.orange{border-top-color:var(--orange)}
+.kpi.var-neg{border-top-color:var(--dgreen);background:linear-gradient(160deg,#eafaf1 0%,#ffffff 55%)}
+.kpi.var-pos{border-top-color:var(--red);background:linear-gradient(160deg,#fdecec 0%,#ffffff 55%)}
+.kpi-icon{font-size:16px;margin-bottom:6px;opacity:.85}
+.kpi-icon.neg{color:var(--dgreen)}
+.kpi-icon.pos{color:var(--red)}
 .kpi-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--g600);margin-bottom:5px}
-.kpi-value{font-size:22px;font-weight:800;color:var(--g900);line-height:1}
-.kpi-value.neg{color:var(--red)}
-.kpi-value.pos{color:var(--dgreen)}
+.kpi-value{font-size:21px;font-weight:800;color:var(--g900);line-height:1;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.kpi-value.neg{color:var(--dgreen)}
+.kpi-value.pos{color:var(--red)}
+.kpi-var-pct{font-size:11px;font-weight:700}
+.kpi-var-pct.neg{color:var(--dgreen)}
+.kpi-var-pct.pos{color:var(--red)}
 .kpi-sub{font-size:11px;margin-top:4px;color:var(--g600)}
 
 /* ── Cards ── */
@@ -160,12 +169,13 @@ tbody tr:hover{background:var(--lgreen)}
 tbody tr:nth-child(even){background:var(--g100)}
 tbody tr:nth-child(even):hover{background:var(--lgreen)}
 td{padding:7px 11px}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
-td.neg{color:var(--red);font-weight:700}
-td.pos{color:var(--dgreen);font-weight:700}
+td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--g900)}
+/* Variance columns only: negative = favorable (green), positive = unfavorable (red) */
+td.neg{color:var(--dgreen);font-weight:700}
+td.pos{color:var(--red);font-weight:700}
 .grand-total td{background:var(--g800)!important;color:white;font-weight:700}
-.grand-total td.neg-g{color:#ffaaaa!important}
-.grand-total td.pos-g{color:#90ee90!important}
+.grand-total td.neg-g{color:#90ee90!important}
+.grand-total td.pos-g{color:#ffaaaa!important}
 .subtotal td{background:var(--lgreen)!important;font-weight:700}
 .indent td:first-child{padding-left:26px}
 
@@ -348,7 +358,7 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
 
   <!-- PAGE: EXECUTIVE SUMMARY -->
   <div id="page-summary" class="page active">
-    <div class="kpi-grid" id="kpi-grid"></div>
+    <div id="kpi-grid"></div>
     <!-- Row 1: Period Trend left half, Gross vs Recoveries right half -->
     <div class="two-col">
       <div class="card">
@@ -362,7 +372,10 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
       </div>
       <div class="card">
         <div class="card-title">Gross vs Recoveries — by Account Group</div>
-        <div class="chart-wrap tall"><canvas id="grossRecovChart"></canvas></div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g600);margin-bottom:4px">Gross</div>
+        <div class="chart-wrap" style="margin-bottom:14px"><canvas id="grossChart" style="max-height:160px"></canvas></div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--g600);margin-bottom:4px">Recoveries</div>
+        <div class="chart-wrap"><canvas id="recovChart" style="max-height:160px"></canvas></div>
       </div>
     </div>
     <!-- Row 2: WBS Type + Region donuts -->
@@ -372,8 +385,8 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
         <div class="chart-wrap short"><canvas id="wbsDonut"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-title">Actual by Region</div>
-        <div class="chart-wrap tall"><canvas id="regionDonut"></canvas></div>
+        <div class="card-title">Actual by Region — by Account Group</div>
+        <div class="chart-wrap tall"><canvas id="regionDonut" style="max-height:340px"></canvas></div>
       </div>
     </div>
     <div class="full-col card">
@@ -403,7 +416,7 @@ td[contenteditable="true"]:focus{background:#fffde7!important;border-bottom:1px 
         <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--g600)">Drill-Down Path</span>
         <div style="display:flex;border:1px solid var(--g200);border-radius:8px;overflow:hidden">
           <button id="sl-path-btn-0" class="toggle-btn active" onclick="setSLPath(0)" style="padding:6px 16px;white-space:nowrap">Service Area → Service Line → Cost Center</button>
-          <button id="sl-path-btn-1" class="toggle-btn" onclick="setSLPath(1)" style="padding:6px 16px;white-space:nowrap">Service Line → Portfolio → Program → Product → Project</button>
+          <button id="sl-path-btn-1" class="toggle-btn" onclick="setSLPath(1)" style="padding:6px 16px;white-space:nowrap">Portfolio → Program → Product → Project</button>
         </div>
       </div>
       <div id="sl-path-hint" style="font-size:11px;color:var(--g600);margin-bottom:10px">Click a row to expand: Service Area → Service Line → Cost Center</div>
@@ -1285,7 +1298,7 @@ function fmt(v) {
   if (v == null || isNaN(v)) return '-';
   const abs = Math.abs(v), sign = v < 0 ? '-' : '';
   if (CURRENCY === 'M') {
-    if (abs >= 1e6) return sign + '$' + (abs/1e6).toFixed(2) + 'M';
+    if (abs >= 1e6) return sign + '$' + (abs/1e6).toFixed(1) + 'M';
     if (abs >= 1e3) return sign + '$' + (abs/1e3).toFixed(1) + 'K';
     return sign + '$' + abs.toFixed(0);
   }
@@ -1401,7 +1414,7 @@ function renderEmptyDashboard() {
   const msg = 'Upload an Excel file using the <strong>↑ Upload Excel File</strong> button in the top right.';
   document.getElementById('kpi-grid').innerHTML = emptyState(msg);
   // destroy any lingering charts
-  ['trendChart','wbsDonut','regionDonut','grossRecovChart','acctChart','slBarChart','fteTrendChart','fteSlChart'].forEach(id => {
+  ['trendChart','wbsDonut','regionDonut','grossChart','recovChart','acctChart','slBarChart','fteTrendChart','fteSlChart'].forEach(id => {
     if (CHARTS[id]) { CHARTS[id].destroy(); delete CHARTS[id]; }
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
@@ -1424,21 +1437,41 @@ function renderEmptyDashboard() {
 function renderKPIs(rows) {
   const k = kpiTotals(rows);
   const grid = document.getElementById('kpi-grid');
+
+  const pctP = k.plan    ? (k.varP / Math.abs(k.plan))    * 100 : 0;
+  const pctF = k.ytdFcst ? (k.varF / Math.abs(k.ytdFcst)) * 100 : 0;
+
   const kpis = [
-    { label:'YTD Actual',    val:k.act,    sub:'Net (Gross + Recoveries)', neg: k.act<0 },
-    { label:'YTD Plan',      val:k.plan,   sub:'Period plan costs' },
-    { label:'Annual Plan',   val:k.annPlan,sub:'Full-year budget' },
-    { label:'Annual Forecast',val:k.annFcst,sub:'Full-year forecast' },
-    { label:'YTD Forecast',  val:k.ytdFcst,sub:'YTD forecast' },
-    { label:'Var to Plan',   val:k.varP,   sub:'Actual vs Plan', neg: k.varP<0 },
-    { label:'Var to Forecast',val:k.varF,  sub:'Actual vs Forecast', neg: k.varF<0 },
+    { label:'YTD Actual',     val:k.act,     sub:'Net (Gross + Recoveries)', icon:'💵', accent:''       },
+    { label:'YTD Plan',       val:k.plan,    sub:'Period plan costs',        icon:'🎯', accent:'blue'   },
+    { label:'YTD Forecast',   val:k.ytdFcst, sub:'YTD forecast',             icon:'📈', accent:'orange' },
+    { label:'Annual Plan',    val:k.annPlan, sub:'Full-year budget',         icon:'📅', accent:'blue'   },
+    { label:'Annual Forecast',val:k.annFcst, sub:'Full-year forecast',       icon:'🔮', accent:'orange' },
+    { label:'Var to Plan',     val:k.varP, pct:pctP, sub:'Actual vs Plan',      variance:true },
+    { label:'Var to Forecast', val:k.varF, pct:pctF, sub:'Actual vs Forecast',  variance:true },
   ];
-  grid.innerHTML = kpis.map(k => `
-    <div class="kpi ${k.neg?'neg':''}">
-      <div class="kpi-label">${k.label}</div>
-      <div class="kpi-value ${k.neg?'neg':(k.val>0?'pos':'')}">${fmt(k.val)}</div>
-      <div class="kpi-sub">${k.sub}</div>
-    </div>`).join('');
+
+  grid.innerHTML = `<div class="kpi-grid">${kpis.map(m => {
+    if (!m.variance) {
+      return `
+      <div class="kpi ${m.accent}">
+        <div class="kpi-icon">${m.icon}</div>
+        <div class="kpi-label">${m.label}</div>
+        <div class="kpi-value">${fmt(m.val)}</div>
+        <div class="kpi-sub">${m.sub}</div>
+      </div>`;
+    }
+    const sign  = m.val < 0 ? 'neg' : (m.val > 0 ? 'pos' : '');
+    const arrow = m.val < 0 ? '▼' : (m.val > 0 ? '▲' : '●');
+    const pctStr = (m.pct>=0?'+':'') + m.pct.toFixed(1) + '%';
+    return `
+      <div class="kpi ${sign ? 'var-'+sign : ''}">
+        <div class="kpi-icon ${sign}">${arrow}</div>
+        <div class="kpi-label">${m.label}</div>
+        <div class="kpi-value ${sign}">${fmt(m.val)}<span class="kpi-var-pct ${sign}">${pctStr}</span></div>
+        <div class="kpi-sub">${m.sub}</div>
+      </div>`;
+  }).join('')}</div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1556,34 +1589,42 @@ function renderWBSDonut(rows) {
 }
 
 function renderRegionDonut(rows) {
-  const regMap = {};
+  // Stacked view: Actual by Region, broken down by Account Group in the same chart
+  const regionTotals = {};
+  const agSet = new Set();
+  const matrix = {}; // matrix[region][acctGroup] = value
   for (const r of rows) {
-    const k = r.Region || 'Unknown';
-    regMap[k] = (regMap[k]||0) + r.TotalCosts;
+    const reg = r.Region || 'Unknown';
+    const ag  = r.AcctGroup || 'Other';
+    agSet.add(ag);
+    if (!matrix[reg]) matrix[reg] = {};
+    matrix[reg][ag] = (matrix[reg][ag] || 0) + r.TotalCosts;
+    regionTotals[reg] = (regionTotals[reg] || 0) + r.TotalCosts;
   }
-  const sorted = Object.entries(regMap).sort((a,b) => b[1]-a[1]);
-  const labels = sorted.map(([k]) => k);
-  const vals   = sorted.map(([,v]) => v);
-  const colors = [GREEN+'cc', BLUE+'cc', ORANGE+'cc', '#9b59b6cc', '#1abc9ccc'];
+  const regions = Object.keys(matrix).sort((a,b) => regionTotals[b]-regionTotals[a]);
+  const acctGroups = [...agSet].sort(acctGroupSort);
+  const palette = [GREEN, BLUE, ORANGE, '#9b59b6', '#1abc9c', '#e53e3e', '#607d8b'];
+
   mkChart('regionDonut','bar',{
-    labels,
-    datasets:[{
-      label:'YTD Actual',
-      data: vals,
-      backgroundColor: labels.map((_,i) => colors[i % colors.length]),
-      borderRadius: 5,
+    labels: regions,
+    datasets: acctGroups.map((ag, i) => ({
+      label: ag,
+      data: regions.map(reg => (matrix[reg] && matrix[reg][ag]) || 0),
+      backgroundColor: palette[i % palette.length] + 'cc',
+      borderRadius: 3,
       borderSkipped: false,
-    }]
+      stack: 'region'
+    }))
   },{
     indexAxis:'y',
     responsive:true, maintainAspectRatio:true,
     plugins:{
-      legend:{display:false},
-      tooltip:{callbacks:{label:c=>' YTD Actual: '+fmt(c.parsed.x)}}
+      legend:{position:'bottom',labels:{boxWidth:11,padding:10,font:{size:10}}},
+      tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.x)}}
     },
     scales:{
-      x:{ticks:{callback:v=>fmt(v)}, grid:{color:'#e8e8f033'}},
-      y:{grid:{display:false}, ticks:{font:{size:12}}}
+      x:{stacked:true, ticks:{callback:v=>fmt(v)}, grid:{color:'#e8e8f033'}},
+      y:{stacked:true, grid:{display:false}, ticks:{font:{size:12}}}
     }
   });
 }
@@ -1660,12 +1701,37 @@ function renderAGDrillTable(rows) {
       }
     }
   }
-  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDg(totals.VarPlan)}${numTDg(totals.VarFcst)}</tr>`;
+  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDgvar(totals.VarPlan)}${numTDgvar(totals.VarFcst)}</tr>`;
   document.getElementById('ag-drill-tbody').innerHTML = html;
 }
 
+// Fixed display order for Account Group across the dashboard
+// Matched by keyword so real-world label variants (e.g. "Outside Prof. Services",
+// "Travel, Meetings & Entertainment") map to the right rank regardless of exact wording.
+const ACCT_GROUP_RANK_RULES = [
+  { name: 'Internal Labor',          test: s => s.includes('internal') && s.includes('labor') },
+  { name: 'Outside Prof. Services',  test: s => s.includes('prof') },
+  { name: 'Computers',               test: s => s.includes('comput') },
+  { name: 'Telecom',                 test: s => s.includes('telecom') },
+  { name: 'Other Cost',              test: s => s.includes('other') && s.includes('cost') },
+  { name: 'TEM',                     test: s => s === 'tem' || s.includes('travel') || s.includes('entertainment') || s.includes('meeting') },
+];
+function _normAG(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+}
+function _acctGroupRank(s) {
+  const n = _normAG(s);
+  const idx = ACCT_GROUP_RANK_RULES.findIndex(rule => rule.test(n));
+  return idx === -1 ? ACCT_GROUP_RANK_RULES.length : idx;
+}
+function acctGroupSort(a, b) {
+  const ia = _acctGroupRank(a), ib = _acctGroupRank(b);
+  if (ia !== ib) return ia - ib;
+  return String(a).localeCompare(String(b));
+}
+
 function renderGrossRecovChart(rows) {
-  // Group by Account Group, split gross vs recoveries
+  // Group by Account Group, split gross vs recoveries into two separate charts
   const agMap = {};
   for (const r of rows) {
     const k = r.AcctGroup || 'Other';
@@ -1675,17 +1741,24 @@ function renderGrossRecovChart(rows) {
     if (isGross) agMap[k].gross += r.TotalCosts;
     if (isRecov) agMap[k].recov += r.TotalCosts;
   }
-  const sorted = Object.entries(agMap).sort((a,b) => Math.abs(b[1].gross) - Math.abs(a[1].gross));
+  const sorted = Object.entries(agMap).sort((a,b) => acctGroupSort(a[0], b[0]));
   const labels = sorted.map(([k]) => k);
-  mkChart('grossRecovChart','bar',{
+
+  mkChart('grossChart','bar',{
     labels,
-    datasets:[
-      {label:'Gross',      data:sorted.map(([,d])=>d.gross), backgroundColor:GREEN+'cc', borderRadius:4},
-      {label:'Recoveries', data:sorted.map(([,d])=>d.recov), backgroundColor:RED+'99',   borderRadius:4},
-    ]
+    datasets:[{label:'Gross', data:sorted.map(([,d])=>d.gross), backgroundColor:GREEN+'cc', borderRadius:4}]
   },{
     responsive:true,maintainAspectRatio:true,
-    plugins:{legend:{position:'top',align:'end'},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y)}}},
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' Gross: '+fmt(c.parsed.y)}}},
+    scales:{y:{ticks:{callback:v=>fmt(v)},grid:{color:'#e8e8f033'}},x:{grid:{display:false},ticks:{maxRotation:30}}}
+  });
+
+  mkChart('recovChart','bar',{
+    labels,
+    datasets:[{label:'Recoveries', data:sorted.map(([,d])=>d.recov), backgroundColor:RED+'99', borderRadius:4}]
+  },{
+    responsive:true,maintainAspectRatio:true,
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' Recoveries: '+fmt(c.parsed.y)}}},
     scales:{y:{ticks:{callback:v=>fmt(v)},grid:{color:'#e8e8f033'}},x:{grid:{display:false},ticks:{maxRotation:30}}}
   });
 }
@@ -1927,11 +2000,17 @@ function toggleAGRows(grpKey, tdEl) {
 // ═══════════════════════════════════════════════════════════════
 // TABLES
 // ═══════════════════════════════════════════════════════════════
-function numTD(v) {
+function numTD(v) { // plain columns (Plan / Forecast / Actual) — always black
+  return `<td class="num">${fmt(v)}</td>`;
+}
+function numTDvar(v) { // variance columns only: negative=green, positive=red
   const cls = v < 0 ? 'neg' : (v > 0 ? 'pos' : '');
   return `<td class="num ${cls}">${fmt(v)}</td>`;
 }
-function numTDg(v) { // for grand total rows
+function numTDg(v) { // plain columns, grand total row
+  return `<td class="num">${fmt(v)}</td>`;
+}
+function numTDgvar(v) { // variance columns, grand total row: negative=green, positive=red
   const cls = v < 0 ? 'neg-g' : (v > 0 ? 'pos-g' : '');
   return `<td class="num ${cls}">${fmt(v)}</td>`;
 }
@@ -1952,9 +2031,9 @@ function renderAGTable(rows) {
 
   let html = '';
   for (const [ag, d] of sortedAG) {
-    html += `<tr><td style="font-weight:600">${ag}</td>${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTD(d.VarPlan)}${numTD(d.VarFcst)}</tr>`;
+    html += `<tr><td style="font-weight:600">${ag}</td>${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTDvar(d.VarPlan)}${numTDvar(d.VarFcst)}</tr>`;
   }
-  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(grandTotals.AnnualPlan)}${numTDg(grandTotals.AnnualFcst)}${numTDg(grandTotals.PlanCosts)}${numTDg(grandTotals.YTDFcst)}${numTDg(grandTotals.TotalCosts)}${numTDg(grandTotals.VarPlan)}${numTDg(grandTotals.VarFcst)}</tr>`;
+  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(grandTotals.AnnualPlan)}${numTDg(grandTotals.AnnualFcst)}${numTDg(grandTotals.PlanCosts)}${numTDg(grandTotals.YTDFcst)}${numTDg(grandTotals.TotalCosts)}${numTDgvar(grandTotals.VarPlan)}${numTDgvar(grandTotals.VarFcst)}</tr>`;
 
   document.getElementById('ag-tbody').innerHTML = html;
 }
@@ -1971,9 +2050,9 @@ function renderWBSTable(rows) {
 
   let html = '';
   for (const [wt, d] of Object.entries(wbsMap).sort((a,b)=>b[1].TotalCosts-a[1].TotalCosts)) {
-    html += `<tr><td style="font-weight:600">${wt}</td>${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTD(d.VarPlan)}${numTD(d.VarFcst)}</tr>`;
+    html += `<tr><td style="font-weight:600">${wt}</td>${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTDvar(d.VarPlan)}${numTDvar(d.VarFcst)}</tr>`;
   }
-  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDg(totals.VarPlan)}${numTDg(totals.VarFcst)}</tr>`;
+  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDgvar(totals.VarPlan)}${numTDgvar(totals.VarFcst)}</tr>`;
   document.getElementById('wbs-tbody').innerHTML = html;
 }
 
@@ -1986,7 +2065,7 @@ function setSLPath(idx) {
   });
   const hints = [
     'Click a row to expand: Service Area → Service Line → Cost Center',
-    'Click a row to expand: Service Line → Portfolio → Program → Product → Project'
+    'Click a row to expand: Portfolio → Program → Product → Project'
   ];
   const hint = document.getElementById('sl-path-hint');
   if (hint) hint.textContent = hints[idx];
@@ -2045,34 +2124,30 @@ function _renderSLTablePath0(rows) {
       }
     }
   }
-  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDg(totals.VarPlan)}${numTDg(totals.VarFcst)}</tr>`;
+  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDgvar(totals.VarPlan)}${numTDgvar(totals.VarFcst)}</tr>`;
   document.getElementById('sl-tbody').innerHTML = html;
 }
 
 function _renderSLTablePath1(rows) {
-  // Service Line → Portfolio → Program → Product → Project (Division)
+  // Portfolio → Program → Product → Project (Division)
   const h = {};
   for (const r of rows) {
-    const sl   = r.ServiceLine  || 'Unknown';
     const port = r.Portfolio    || 'Unknown';
     const prog = r.ProgramName  || 'Unknown';
     const prod = r.Product      || r.Portfolio || 'Unknown';
     const proj = r.Division     || 'Unknown';
 
-    if (!h[sl]) h[sl] = { _totals: zeroFin(), _children: {} };
-    addFin(h[sl]._totals, r);
+    if (!h[port]) h[port] = { _totals: zeroFin(), _children: {} };
+    addFin(h[port]._totals, r);
 
-    if (!h[sl]._children[port]) h[sl]._children[port] = { _totals: zeroFin(), _children: {} };
-    addFin(h[sl]._children[port]._totals, r);
+    if (!h[port]._children[prog]) h[port]._children[prog] = { _totals: zeroFin(), _children: {} };
+    addFin(h[port]._children[prog]._totals, r);
 
-    if (!h[sl]._children[port]._children[prog]) h[sl]._children[port]._children[prog] = { _totals: zeroFin(), _children: {} };
-    addFin(h[sl]._children[port]._children[prog]._totals, r);
+    if (!h[port]._children[prog]._children[prod]) h[port]._children[prog]._children[prod] = { _totals: zeroFin(), _children: {} };
+    addFin(h[port]._children[prog]._children[prod]._totals, r);
 
-    if (!h[sl]._children[port]._children[prog]._children[prod]) h[sl]._children[port]._children[prog]._children[prod] = { _totals: zeroFin(), _children: {} };
-    addFin(h[sl]._children[port]._children[prog]._children[prod]._totals, r);
-
-    if (!h[sl]._children[port]._children[prog]._children[prod]._children[proj]) h[sl]._children[port]._children[prog]._children[prod]._children[proj] = zeroFin();
-    addFin(h[sl]._children[port]._children[prog]._children[prod]._children[proj], r);
+    if (!h[port]._children[prog]._children[prod]._children[proj]) h[port]._children[prog]._children[prod]._children[proj] = zeroFin();
+    addFin(h[port]._children[prog]._children[prod]._children[proj], r);
   }
 
   const totals = zeroFin();
@@ -2080,31 +2155,26 @@ function _renderSLTablePath1(rows) {
 
   let html = '';
   let idx = 0;
-  const sortedSL = Object.entries(h).sort((a,b) => Math.abs(b[1]._totals.VarPlan) - Math.abs(a[1]._totals.VarPlan));
-  for (const [sl, slData] of sortedSL) {
-    const slKey = 'sl_' + (idx++);
-    html += hierRow(sl, slData._totals, 0, slKey, true);
-    const sortedPort = Object.entries(slData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
-    for (const [port, portData] of sortedPort) {
-      const portKey = slKey + '_o' + (idx++);
-      html += hierRow(port, portData._totals, 1, portKey, false, slKey);
-      const sortedProg = Object.entries(portData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
-      for (const [prog, progData] of sortedProg) {
-        const progKey = portKey + '_g' + (idx++);
-        html += hierRow(prog, progData._totals, 2, progKey, false, portKey);
-        const sortedProd = Object.entries(progData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
-        for (const [prod, prodData] of sortedProd) {
-          const prodKey = progKey + '_d' + (idx++);
-          html += hierRow(prod, prodData._totals, 3, prodKey, false, progKey);
-          const sortedProj = Object.entries(prodData._children).sort((a,b) => b[1].TotalCosts - a[1].TotalCosts);
-          for (const [proj, projTotals] of sortedProj) {
-            html += hierRow(proj, projTotals, 4, '', false, prodKey, true);
-          }
+  const sortedPort = Object.entries(h).sort((a,b) => Math.abs(b[1]._totals.VarPlan) - Math.abs(a[1]._totals.VarPlan));
+  for (const [port, portData] of sortedPort) {
+    const portKey = 'sl_' + (idx++);
+    html += hierRow(port, portData._totals, 0, portKey, true);
+    const sortedProg = Object.entries(portData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
+    for (const [prog, progData] of sortedProg) {
+      const progKey = portKey + '_g' + (idx++);
+      html += hierRow(prog, progData._totals, 1, progKey, false, portKey);
+      const sortedProd = Object.entries(progData._children).sort((a,b) => b[1]._totals.TotalCosts - a[1]._totals.TotalCosts);
+      for (const [prod, prodData] of sortedProd) {
+        const prodKey = progKey + '_d' + (idx++);
+        html += hierRow(prod, prodData._totals, 2, prodKey, false, progKey);
+        const sortedProj = Object.entries(prodData._children).sort((a,b) => b[1].TotalCosts - a[1].TotalCosts);
+        for (const [proj, projTotals] of sortedProj) {
+          html += hierRow(proj, projTotals, 3, '', false, prodKey, true);
         }
       }
     }
   }
-  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDg(totals.VarPlan)}${numTDg(totals.VarFcst)}</tr>`;
+  html += `<tr class="grand-total"><td>Grand Total</td>${numTDg(totals.AnnualPlan)}${numTDg(totals.AnnualFcst)}${numTDg(totals.PlanCosts)}${numTDg(totals.YTDFcst)}${numTDg(totals.TotalCosts)}${numTDgvar(totals.VarPlan)}${numTDgvar(totals.VarFcst)}</tr>`;
   document.getElementById('sl-tbody').innerHTML = html;
 }
 
@@ -2125,7 +2195,7 @@ function hierRow(label, d, depth, key, isTop, parentKey, isLeaf) {
   const ownClass = key ? `hier-parent-${key}` : '';
   return `<tr class="${parentClass} ${ownClass}" ${!isTop ? displayStyle : ''} data-depth="${depth}">
     <td style="padding-left:${12+indent}px;font-weight:${weight};max-width:280px;overflow:hidden;text-overflow:ellipsis;${bgStyle}" title="${label}">${prefix}${label}</td>
-    ${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTD(d.VarPlan)}${numTD(d.VarFcst)}
+    ${numTD(d.AnnualPlan)}${numTD(d.AnnualFcst)}${numTD(d.PlanCosts)}${numTD(d.YTDFcst)}${numTD(d.TotalCosts)}${numTDvar(d.VarPlan)}${numTDvar(d.VarFcst)}
   </tr>`;
 }
 
@@ -2169,9 +2239,9 @@ function renderFTE() {
   const slCount  = new Set(rows.map(r => r.ServiceLine)).size;
 
   document.getElementById('fte-kpi-grid').innerHTML = [
-    {label:'Peak FTE (P13)', val:p13Total.toFixed(2), sub:'All regions combined'},
-    {label:'US FTE (P13)',   val:p13US.toFixed(2),    sub:'US headcount'},
-    {label:'USI FTE (P13)',  val:p13USI.toFixed(2),   sub:'USI headcount'},
+    {label:'Peak FTE (P13)', val:p13Total.toFixed(1), sub:'All regions combined'},
+    {label:'US FTE (P13)',   val:p13US.toFixed(1),    sub:'US headcount'},
+    {label:'USI FTE (P13)',  val:p13USI.toFixed(1),   sub:'USI headcount'},
     {label:'Service Lines',  val:slCount,              sub:'With FTE data'},
   ].map(k => `<div class="kpi blue"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.val.toLocaleString()}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
 
@@ -2194,7 +2264,7 @@ function renderFTE() {
     grandPeriodTotals[p]  = (grandPeriodTotals[p]||0) + r.FTE;
   }
 
-  const fmtFTE = v => (v == null || v === 0) ? '0.00' : v.toFixed(2);
+  const fmtFTE = v => (v == null || v === 0) ? '0.0' : v.toFixed(1);
   const periodHeaders = PERIODS.map(p => `<th>PD${p}</th>`).join('');
   document.getElementById('fte-pivot-head').innerHTML =
     `<tr><th style="text-align:left;position:sticky;top:0;background:var(--g800)">Job Lvl ID</th>${periodHeaders}</tr>`;
@@ -2237,7 +2307,7 @@ function renderFTE() {
     ]
   },{
     responsive:true,maintainAspectRatio:true,
-    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y.toFixed(2)+' FTE'}}},
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y.toFixed(1)+' FTE'}}},
     scales:{y:{grid:{color:'#e8e8f033'},ticks:{callback:v=>v.toFixed(0)}},x:{grid:{display:false}}}
   });
 
@@ -2254,13 +2324,13 @@ function renderFTE() {
     labels: slSorted.map(([sl]) => sl.replace('PxE ','').slice(0,34)),
     datasets:[{
       label:'FTE (P13)',
-      data: slSorted.map(([,v]) => parseFloat(v.toFixed(2))),
+      data: slSorted.map(([,v]) => parseFloat(v.toFixed(1))),
       backgroundColor: BLUE+'99',
       borderRadius: 4
     }]
   },{
     indexAxis:'y', responsive:true, maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' FTE: '+c.parsed.x.toFixed(2)}}},
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' FTE: '+c.parsed.x.toFixed(1)}}},
     scales:{x:{grid:{color:'#e8e8f033'},ticks:{callback:v=>v.toFixed(0)}},y:{grid:{display:false},ticks:{font:{size:11}}}}
   });
 }
